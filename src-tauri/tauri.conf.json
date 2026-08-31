@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "asterism",
+  "productName": "Asterism",
   "version": "0.1.0",
   "identifier": "com.saran.asterism",
   "build": {
@@ -12,9 +12,11 @@
   "app": {
     "windows": [
       {
-        "title": "asterism",
-        "width": 800,
-        "height": 600
+        "title": "Asterism ⁂",
+        "width": 1080,
+        "height": 720,
+        "minWidth": 650,
+        "minHeight": 450
       }
     ],
     "security": {
