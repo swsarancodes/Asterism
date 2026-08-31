@@ -1,7 +1,7 @@
 import React from 'react';
 import { useWorkspaceStore } from '../stores/workspace';
 import { useSettingsStore } from '../stores/settings';
-import { Moon, Sun, PanelLeft } from 'lucide-react';
+import { Moon, Sun } from 'lucide-react';
 
 export const StatusBar: React.FC = () => {
   const line = useWorkspaceStore((s) => s.cursorLine);
@@ -15,8 +15,6 @@ export const StatusBar: React.FC = () => {
 
   const theme = useSettingsStore((s) => s.theme);
   const setTheme = useSettingsStore((s) => s.setTheme);
-  const sidebarOpen = useSettingsStore((s) => s.sidebarOpen);
-  const toggleSidebar = useSettingsStore((s) => s.toggleSidebar);
 
   const toggleTheme = () => {
     setTheme(theme === 'light' ? 'dark' : 'light');
@@ -35,28 +33,11 @@ export const StatusBar: React.FC = () => {
         fontSize: '11.5px',
         color: 'var(--as-text-dim)',
         userSelect: 'none',
+        flexShrink: 0,
       }}
     >
-      {/* Left side: sidebar toggle & word statistics */}
+      {/* Left side: word statistics */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        {!sidebarOpen && (
-          <button
-            onClick={toggleSidebar}
-            title="Open Sidebar (⌘\)"
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'inherit',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              padding: 0,
-            }}
-          >
-            <PanelLeft size={13} />
-          </button>
-        )}
-
         <span>
           {wordCount} {wordCount === 1 ? 'word' : 'words'}
         </span>
@@ -77,6 +58,7 @@ export const StatusBar: React.FC = () => {
         </span>
 
         <button
+          type="button"
           onClick={toggleTheme}
           title={`Switch to ${theme === 'light' ? 'Dark' : 'Light'} Theme`}
           style={{

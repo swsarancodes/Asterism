@@ -2,7 +2,7 @@ import React from 'react';
 import { useWorkspaceStore } from '../stores/workspace';
 import { useSettingsStore } from '../stores/settings';
 import { ViewMode } from '../../editor/modes/view-mode';
-import { FileText, Plus, X, Eye, Code, Columns } from 'lucide-react';
+import { FileText, Plus, X, Eye, Code, Columns, PanelLeft } from 'lucide-react';
 
 export const TabBar: React.FC = () => {
   const documents = useWorkspaceStore((s) => s.documents);
@@ -13,6 +13,8 @@ export const TabBar: React.FC = () => {
 
   const mode = useSettingsStore((s) => s.mode);
   const setMode = useSettingsStore((s) => s.setMode);
+  const sidebarOpen = useSettingsStore((s) => s.sidebarOpen);
+  const toggleSidebar = useSettingsStore((s) => s.toggleSidebar);
 
   return (
     <div
@@ -23,12 +25,47 @@ export const TabBar: React.FC = () => {
         height: '42px',
         borderBottom: '1px solid var(--as-border)',
         backgroundColor: 'var(--as-bg-surface)',
-        padding: '0 8px',
+        padding: '0 10px',
         userSelect: 'none',
+        flexShrink: 0,
       }}
     >
-      {/* Tabs */}
+      {/* Left side: Expand sidebar button (when collapsed) + Tabs */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '4px', overflowX: 'auto' }}>
+        {/* Top-Left Expand Sidebar Button when collapsed */}
+        {!sidebarOpen && (
+          <button
+            type="button"
+            aria-label="Expand sidebar (⌘\)"
+            title="Expand sidebar (⌘\)"
+            onClick={toggleSidebar}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '28px',
+              height: '28px',
+              borderRadius: 'var(--as-radius-sm)',
+              border: 'none',
+              backgroundColor: 'transparent',
+              color: 'var(--as-text-muted)',
+              cursor: 'pointer',
+              marginRight: '6px',
+              transition: 'all var(--as-transition-fast)',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'var(--as-bg-hover)';
+              e.currentTarget.style.color = 'var(--as-text)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+              e.currentTarget.style.color = 'var(--as-text-muted)';
+            }}
+          >
+            <PanelLeft size={16} />
+          </button>
+        )}
+
         {documents.map((doc) => {
           const isActive = doc.id === activeId;
           return (
@@ -48,6 +85,12 @@ export const TabBar: React.FC = () => {
                 cursor: 'pointer',
                 transition: 'all var(--as-transition-fast)',
               }}
+              onMouseEnter={(e) => {
+                if (!isActive) e.currentTarget.style.backgroundColor = 'var(--as-bg-hover)';
+              }}
+              onMouseLeave={(e) => {
+                if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
+              }}
             >
               <FileText size={14} style={{ opacity: isActive ? 1 : 0.7 }} />
               <span>{doc.meta.fileName}</span>
@@ -64,6 +107,7 @@ export const TabBar: React.FC = () => {
               )}
               {documents.length > 1 && (
                 <button
+                  type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     closeDoc(doc.id);
@@ -78,6 +122,8 @@ export const TabBar: React.FC = () => {
                     color: 'inherit',
                     opacity: 0.6,
                   }}
+                  onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
+                  onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.6')}
                 >
                   <X size={12} />
                 </button>
@@ -87,6 +133,7 @@ export const TabBar: React.FC = () => {
         })}
 
         <button
+          type="button"
           onClick={() => createEmpty()}
           title="New Document (⌘N)"
           style={{
@@ -99,12 +146,20 @@ export const TabBar: React.FC = () => {
             display: 'flex',
             alignItems: 'center',
           }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = 'var(--as-bg-hover)';
+            e.currentTarget.style.color = 'var(--as-text)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = 'transparent';
+            e.currentTarget.style.color = 'var(--as-text-muted)';
+          }}
         >
           <Plus size={16} />
         </button>
       </div>
 
-      {/* Mode Switcher */}
+      {/* Right side: Mode Switcher */}
       <div
         style={{
           display: 'flex',
@@ -127,6 +182,7 @@ export const TabBar: React.FC = () => {
           return (
             <button
               key={item.id}
+              type="button"
               onClick={() => setMode(item.id)}
               title={`${item.label} Mode (${item.shortcut})`}
               style={{
