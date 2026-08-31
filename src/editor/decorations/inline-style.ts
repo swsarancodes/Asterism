@@ -19,9 +19,11 @@ const headingDecos: Record<number, Decoration> = {
 
 export function buildInlineStyleDecorations(view: EditorView): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
+  const doc = view.state.doc;
   const marks: Array<{ from: number; to: number; deco: Decoration }> = [];
 
   for (const { from, to } of view.visibleRanges) {
+    // 1. Traverse syntax tree for standard AST nodes
     syntaxTree(view.state).iterate({
       from,
       to,
@@ -51,6 +53,42 @@ export function buildInlineStyleDecorations(view: EditorView): DecorationSet {
         }
       },
     });
+
+    // 2. Resilient pattern matching for inline formats (e.g. while editing or deleting words)
+    const text = doc.sliceString(from, to);
+
+    // Bold pattern: **text**
+    const boldRegex = /\*\*([^\*\n]+?)\*\*/g;
+    let bm;
+    while ((bm = boldRegex.exec(text)) !== null) {
+      const start = from + bm.index;
+      const end = start + bm[0].length;
+      if (!marks.some((m) => m.from === start && m.to === end)) {
+        marks.push({ from: start, to: end, deco: strongDeco });
+      }
+    }
+
+    // Strikethrough pattern: ~~text~~
+    const strikeRegex = /~~([^~\n]+?)~~/g;
+    let sm;
+    while ((sm = strikeRegex.exec(text)) !== null) {
+      const start = from + sm.index;
+      const end = start + sm[0].length;
+      if (!marks.some((m) => m.from === start && m.to === end)) {
+        marks.push({ from: start, to: end, deco: strikeDeco });
+      }
+    }
+
+    // Inline code pattern: `code`
+    const codeRegex = /`([^`\n]+?)`/g;
+    let cm;
+    while ((cm = codeRegex.exec(text)) !== null) {
+      const start = from + cm.index;
+      const end = start + cm[0].length;
+      if (!marks.some((m) => m.from === start && m.to === end)) {
+        marks.push({ from: start, to: end, deco: codeInlineDeco });
+      }
+    }
   }
 
   // Sort strictly by `from` ascending, then `to` ascending

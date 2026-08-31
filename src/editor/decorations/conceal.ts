@@ -14,6 +14,7 @@ export function buildConcealDecorations(view: EditorView): DecorationSet {
   const rawRanges: Array<{ from: number; to: number }> = [];
 
   for (const { from, to } of view.visibleRanges) {
+    // 1. Iterate AST nodes
     syntaxTree(view.state).iterate({
       from,
       to,
@@ -86,6 +87,39 @@ export function buildConcealDecorations(view: EditorView): DecorationSet {
         }
       },
     });
+
+    // 2. Resilient pattern matching for inline syntax markers (e.g. while editing or deleting words)
+    const text = doc.sliceString(from, to);
+
+    // Bold pattern: **text**
+    const boldRegex = /\*\*([^\*\n]+?)\*\*/g;
+    let bm;
+    while ((bm = boldRegex.exec(text)) !== null) {
+      const start = from + bm.index;
+      const end = start + bm[0].length;
+      rawRanges.push({ from: start, to: start + 2 });
+      rawRanges.push({ from: end - 2, to: end });
+    }
+
+    // Strikethrough pattern: ~~text~~
+    const strikeRegex = /~~([^~\n]+?)~~/g;
+    let sm;
+    while ((sm = strikeRegex.exec(text)) !== null) {
+      const start = from + sm.index;
+      const end = start + sm[0].length;
+      rawRanges.push({ from: start, to: start + 2 });
+      rawRanges.push({ from: end - 2, to: end });
+    }
+
+    // Inline code pattern: `code`
+    const codeRegex = /`([^`\n]+?)`/g;
+    let cm;
+    while ((cm = codeRegex.exec(text)) !== null) {
+      const start = from + cm.index;
+      const end = start + cm[0].length;
+      rawRanges.push({ from: start, to: start + 1 });
+      rawRanges.push({ from: end - 1, to: end });
+    }
   }
 
   // Filter valid ranges & sort strictly by from ascending, to ascending

@@ -1,4 +1,4 @@
-import { EditorState, Extension } from '@codemirror/state';
+import { EditorState, Extension, Prec } from '@codemirror/state';
 import { EditorView, keymap, drawSelection, dropCursor } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { createMarkdownExtension } from '../core/markdown/grammar';
@@ -36,7 +36,8 @@ export function createEditorExtensions(options: EditorSetupOptions = {}): Extens
     createMarkdownExtension(),
     ...getModeExtensions(mode),
     updateListener,
-    keymap.of([...markdownFormattingKeymap, ...defaultKeymap, ...historyKeymap]),
+    Prec.highest(keymap.of(markdownFormattingKeymap)),
+    keymap.of([...defaultKeymap, ...historyKeymap]),
     EditorView.lineWrapping,
   ];
 }

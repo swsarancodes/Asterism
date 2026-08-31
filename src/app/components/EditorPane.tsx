@@ -7,6 +7,7 @@ import { useWorkspaceStore } from '../stores/workspace';
 import { useSettingsStore } from '../stores/settings';
 import { FloatingToolbar } from './FloatingToolbar';
 import { SlashCommandMenu } from './SlashCommandMenu';
+import { toggleInlineFormat, setHeadingLevel } from '../../editor/commands/formatting';
 
 interface EditorPaneProps {
   modeOverride?: ViewMode;
@@ -34,6 +35,49 @@ export const EditorPane: React.FC<EditorPaneProps> = ({ modeOverride }) => {
   const [slashQuery, setSlashQuery] = useState('');
   const [slashPos, setSlashPos] = useState<{ top: number; left: number } | null>(null);
   const [slashRange, setSlashRange] = useState<{ from: number; to: number } | null>(null);
+
+  // Global keydown handler to ensure Cmd+B, Cmd+I, Cmd+E, Cmd+K work reliably
+  useEffect(() => {
+    const handleGlobalShortcuts = (e: KeyboardEvent) => {
+      if (!viewRef.current || !viewRef.current.hasFocus) return;
+      const isMod = e.metaKey || e.ctrlKey;
+      if (!isMod) return;
+
+      const key = e.key.toLowerCase();
+      if (key === 'b' && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleInlineFormat(viewRef.current, '**');
+      } else if (key === 'i' && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleInlineFormat(viewRef.current, '*');
+      } else if (key === 'e' && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleInlineFormat(viewRef.current, '`');
+      } else if ((key === 'x' || key === 's') && e.shiftKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleInlineFormat(viewRef.current, '~~');
+      } else if (key === '1' && e.altKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        setHeadingLevel(viewRef.current, 1);
+      } else if (key === '2' && e.altKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        setHeadingLevel(viewRef.current, 2);
+      } else if (key === '3' && e.altKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        setHeadingLevel(viewRef.current, 3);
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalShortcuts, true);
+    return () => window.removeEventListener('keydown', handleGlobalShortcuts, true);
+  }, []);
 
   // Initialize and update CodeMirror EditorView on activeDocId or effectiveMode change
   useEffect(() => {
