@@ -273,7 +273,7 @@ export function insertTableTemplate(view: EditorView, replaceRange?: { from: num
 }
 
 /**
- * Inserts a Mermaid Diagram template
+ * Inserts a Mermaid Flowchart template
  */
 export function insertMermaidTemplate(view: EditorView, replaceRange?: { from: number; to: number }) {
   const mermaidMarkdown = `\`\`\`mermaid
@@ -282,6 +282,96 @@ flowchart TD
     B --> C{Decision}
     C -->|Yes| D[Result 1]
     C -->|No| E[Result 2]
+\`\`\``;
+
+  const { state } = view;
+  const target = replaceRange || { from: state.selection.main.from, to: state.selection.main.to };
+
+  view.dispatch({
+    changes: { from: target.from, to: target.to, insert: mermaidMarkdown },
+  });
+  view.focus();
+}
+
+/**
+ * Inserts a Mermaid Sequence Diagram template
+ */
+export function insertSequenceTemplate(view: EditorView, replaceRange?: { from: number; to: number }) {
+  const mermaidMarkdown = `\`\`\`mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant Client as Web App
+    participant Server as API Gateway
+    participant DB as Database
+
+    User->>Client: Click Action
+    Client->>Server: POST /api/data
+    Server->>DB: Query records
+    DB-->>Server: Return rows
+    Server-->>Client: 200 OK (JSON)
+    Client-->>User: Render updated UI
+\`\`\``;
+
+  const { state } = view;
+  const target = replaceRange || { from: state.selection.main.from, to: state.selection.main.to };
+
+  view.dispatch({
+    changes: { from: target.from, to: target.to, insert: mermaidMarkdown },
+  });
+  view.focus();
+}
+
+/**
+ * Inserts a Mermaid Mindmap template
+ */
+export function insertMindmapTemplate(view: EditorView, replaceRange?: { from: number; to: number }) {
+  const mermaidMarkdown = `\`\`\`mermaid
+mindmap
+  root((Project))
+    Origins
+      Inspiration
+      Vision
+    Architecture
+      Editor Core
+      Decoration Engine
+      Markdown AST
+    Features
+      Tables
+      Diagrams
+      Typography
+\`\`\``;
+
+  const { state } = view;
+  const target = replaceRange || { from: state.selection.main.from, to: state.selection.main.to };
+
+  view.dispatch({
+    changes: { from: target.from, to: target.to, insert: mermaidMarkdown },
+  });
+  view.focus();
+}
+
+/**
+ * Inserts a Mermaid Entity Relationship (ER) Diagram template
+ */
+export function insertERTemplate(view: EditorView, replaceRange?: { from: number; to: number }) {
+  const mermaidMarkdown = `\`\`\`mermaid
+erDiagram
+    USER ||--o{ DOCUMENT : owns
+    DOCUMENT ||--|{ REVISION : contains
+    DOCUMENT ||--o{ TAG : labeled_with
+
+    USER {
+        string id PK
+        string username
+        string email
+    }
+    DOCUMENT {
+        string id PK
+        string title
+        string path
+        datetime updated_at
+    }
 \`\`\``;
 
   const { state } = view;
