@@ -33,6 +33,71 @@ function initMermaidTheme() {
   mermaidInitialized = true;
 }
 
+const DIAGRAM_TEMPLATES: Record<string, string> = {
+  flowchart: `flowchart TD
+    A[Start] --> B[Process Step]
+    B --> C{Decision}
+    C -->|Yes| D[Result 1]
+    C -->|No| E[Result 2]`,
+  sequence: `sequenceDiagram
+    autonumber
+    actor User
+    participant Client
+    participant Server
+    User->>Client: Click Action
+    Client->>Server: Request
+    Server-->>Client: Response
+    Client-->>User: Update View`,
+  mindmap: `mindmap
+  root((Topic))
+    Origins
+      Concept
+      Vision
+    Architecture
+      Client
+      Server
+    Features
+      Markdown
+      Diagrams`,
+  classDiagram: `classDiagram
+    class Note {
+      +String title
+      +String content
+      +save()
+    }
+    class Workspace {
+      +List~Note~ notes
+      +openNote()
+    }
+    Workspace o-- Note`,
+  stateDiagram: `stateDiagram-v2
+    [*] --> Draft
+    Draft --> Review: Submit
+    Review --> Published: Approve
+    Review --> Draft: Request Changes
+    Published --> [*]`,
+  erDiagram: `erDiagram
+    USER ||--o{ DOCUMENT : owns
+    DOCUMENT ||--|{ REVISION : contains
+    USER {
+        string id PK
+        string email
+    }`,
+  pie: `pie title Distribution
+    "Core Writing" : 55
+    "Code & Technical" : 25
+    "Diagrams & Visuals" : 20`,
+  gitGraph: `gitGraph
+    commit
+    branch develop
+    checkout develop
+    commit
+    commit
+    checkout main
+    merge develop
+    commit`,
+};
+
 export class MermaidWidget extends MarkdownWidget {
   toDOM(view: EditorView): HTMLElement {
     initMermaidTheme();
@@ -56,6 +121,47 @@ export class MermaidWidget extends MarkdownWidget {
     const left = document.createElement('div');
     left.className = 'as-diagram-badge';
     left.innerHTML = `<span class="as-diagram-dot"></span><span>Mermaid Diagram</span>`;
+
+    // Type Switcher Select
+    const select = document.createElement('select');
+    select.className = 'as-diagram-select';
+    select.title = 'Switch Diagram Type Template';
+
+    const options = [
+      { key: '', label: 'Templates…' },
+      { key: 'flowchart', label: 'Flowchart' },
+      { key: 'sequence', label: 'Sequence' },
+      { key: 'mindmap', label: 'Mindmap' },
+      { key: 'classDiagram', label: 'Class Diagram' },
+      { key: 'stateDiagram', label: 'State Diagram' },
+      { key: 'erDiagram', label: 'ER Diagram' },
+      { key: 'pie', label: 'Pie Chart' },
+      { key: 'gitGraph', label: 'Git Graph' },
+    ];
+
+    for (const opt of options) {
+      const optionEl = document.createElement('option');
+      optionEl.value = opt.key;
+      optionEl.textContent = opt.label;
+      select.appendChild(optionEl);
+    }
+
+    select.onchange = (e) => {
+      e.stopPropagation();
+      const chosen = select.value;
+      if (chosen && DIAGRAM_TEMPLATES[chosen]) {
+        const templateCode = DIAGRAM_TEMPLATES[chosen];
+        textarea.value = templateCode;
+        renderDiagram(templateCode);
+        const newBlockText = `\`\`\`mermaid\n${templateCode}\n\`\`\``;
+        view.dispatch({
+          changes: { from: this.from, to: this.to, insert: newBlockText },
+        });
+      }
+      select.value = '';
+    };
+
+    left.appendChild(select);
     toolbar.appendChild(left);
 
     const right = document.createElement('div');
@@ -89,7 +195,7 @@ export class MermaidWidget extends MarkdownWidget {
     copyBtn.textContent = 'Copy';
     copyBtn.onclick = (e) => {
       e.stopPropagation();
-      navigator.clipboard.writeText(cleanCode);
+      navigator.clipboard.writeText(textarea.value || cleanCode);
       copyBtn.textContent = 'Copied!';
       setTimeout(() => {
         copyBtn.textContent = 'Copy';
@@ -117,6 +223,20 @@ export class MermaidWidget extends MarkdownWidget {
       }
     };
     right.appendChild(exportBtn);
+
+    // Delete Diagram Button
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'as-widget-btn as-widget-btn-danger';
+    deleteBtn.title = 'Delete Diagram Block';
+    deleteBtn.textContent = 'Delete';
+    deleteBtn.onclick = (e) => {
+      e.stopPropagation();
+      view.dispatch({
+        changes: { from: this.from, to: this.to, insert: '' },
+      });
+      view.focus();
+    };
+    right.appendChild(deleteBtn);
 
     toolbar.appendChild(right);
     container.appendChild(toolbar);

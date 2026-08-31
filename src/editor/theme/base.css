@@ -335,6 +335,32 @@
 .as-widget-btn-subtle:hover {
   background-color: var(--as-bg-hover);
 }
+.as-widget-btn-danger {
+  color: #ef4444;
+  border-color: transparent;
+  background: transparent;
+}
+.as-widget-btn-danger:hover {
+  background-color: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.as-diagram-select {
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: var(--as-radius-sm);
+  border: 1px solid var(--as-border);
+  background-color: var(--as-bg-surface);
+  color: var(--as-text-muted);
+  outline: none;
+  cursor: pointer;
+  margin-left: 4px;
+}
+.as-diagram-select:hover {
+  border-color: var(--as-border-strong);
+  color: var(--as-text);
+}
 
 .as-table {
   width: 100%;

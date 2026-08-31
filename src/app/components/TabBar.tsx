@@ -10,11 +10,28 @@ export const TabBar: React.FC = () => {
   const setActiveDoc = useWorkspaceStore((s) => s.setActiveDocument);
   const closeDoc = useWorkspaceStore((s) => s.closeDocument);
   const createEmpty = useWorkspaceStore((s) => s.createEmptyDocument);
+  const renameDoc = useWorkspaceStore((s) => s.renameDocument);
 
   const mode = useSettingsStore((s) => s.mode);
   const setMode = useSettingsStore((s) => s.setMode);
   const sidebarOpen = useSettingsStore((s) => s.sidebarOpen);
   const toggleSidebar = useSettingsStore((s) => s.toggleSidebar);
+
+  const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [editingName, setEditingName] = React.useState('');
+
+  const handleStartRename = (docId: string, currentName: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setEditingId(docId);
+    setEditingName(currentName);
+  };
+
+  const handleFinishRename = (docId: string) => {
+    if (editingName.trim()) {
+      renameDoc(docId, editingName.trim());
+    }
+    setEditingId(null);
+  };
 
   return (
     <div
@@ -68,10 +85,13 @@ export const TabBar: React.FC = () => {
 
         {documents.map((doc) => {
           const isActive = doc.id === activeId;
+          const isEditing = doc.id === editingId;
+
           return (
             <div
               key={doc.id}
               onClick={() => setActiveDoc(doc.id)}
+              onDoubleClick={(e) => handleStartRename(doc.id, doc.meta.fileName, e)}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -93,7 +113,38 @@ export const TabBar: React.FC = () => {
               }}
             >
               <FileText size={14} style={{ opacity: isActive ? 1 : 0.7 }} />
-              <span>{doc.meta.fileName}</span>
+
+              {isEditing ? (
+                <input
+                  autoFocus
+                  type="text"
+                  value={editingName}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => setEditingName(e.target.value)}
+                  onBlur={() => handleFinishRename(doc.id)}
+                  onKeyDown={(e) => {
+                    e.stopPropagation();
+                    if (e.key === 'Enter') {
+                      handleFinishRename(doc.id);
+                    } else if (e.key === 'Escape') {
+                      setEditingId(null);
+                    }
+                  }}
+                  style={{
+                    fontSize: '12px',
+                    padding: '1px 4px',
+                    color: 'var(--as-text)',
+                    backgroundColor: 'var(--as-bg-surface)',
+                    border: '1px solid var(--as-accent)',
+                    borderRadius: '3px',
+                    outline: 'none',
+                    width: `${Math.max(60, editingName.length * 8)}px`,
+                  }}
+                />
+              ) : (
+                <span title="Double-click to rename">{doc.meta.fileName}</span>
+              )}
+
               {doc.isDirty && (
                 <span
                   style={{

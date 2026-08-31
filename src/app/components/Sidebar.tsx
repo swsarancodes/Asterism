@@ -9,6 +9,7 @@ import {
   BookOpen,
   Search,
   X,
+  Pencil,
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
@@ -18,16 +19,32 @@ export const Sidebar: React.FC = () => {
   const closeDoc = useWorkspaceStore((s) => s.closeDocument);
   const createEmpty = useWorkspaceStore((s) => s.createEmptyDocument);
   const openDoc = useWorkspaceStore((s) => s.openDocument);
+  const renameDoc = useWorkspaceStore((s) => s.renameDocument);
 
   const sidebarOpen = useSettingsStore((s) => s.sidebarOpen);
   const toggleSidebar = useSettingsStore((s) => s.toggleSidebar);
 
   const [query, setQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
 
   const visibleDocuments = documents.filter((doc) =>
     doc.meta.fileName.toLowerCase().includes(query.trim().toLowerCase())
   );
+
+  const handleStartRename = (docId: string, currentName: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setEditingId(docId);
+    setEditingName(currentName);
+  };
+
+  const handleFinishRename = (docId: string) => {
+    if (editingName.trim()) {
+      renameDoc(docId, editingName.trim());
+    }
+    setEditingId(null);
+  };
 
   const handleOpenLocalFile = () => {
     const input = document.createElement('input');
@@ -148,29 +165,27 @@ serialization step. Saving is \`doc.toString()\` plus line-ending restoration.
               alignItems: 'center',
               gap: '6px',
               padding: '4px 8px',
+              backgroundColor: 'var(--as-bg-hover)',
               borderRadius: 'var(--as-radius-sm)',
-              backgroundColor: searchFocused ? 'var(--as-bg-surface)' : 'var(--as-bg-subtle)',
-              border: searchFocused ? '1px solid var(--as-accent)' : '1px solid var(--as-border)',
-              boxShadow: searchFocused ? 'var(--as-shadow-sm)' : 'none',
-              transition: 'all var(--as-transition-fast)',
+              border: searchFocused ? '1px solid var(--as-accent)' : '1px solid transparent',
+              transition: 'border var(--as-transition-fast)',
             }}
           >
             <Search size={13} style={{ color: 'var(--as-text-dim)', flexShrink: 0 }} />
             <input
               type="text"
+              placeholder="Search notes…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onFocus={() => setSearchFocused(true)}
               onBlur={() => setSearchFocused(false)}
-              placeholder="Filter notes..."
               style={{
-                flex: 1,
+                background: 'none',
                 border: 'none',
                 outline: 'none',
-                background: 'transparent',
                 fontSize: '12px',
                 color: 'var(--as-text)',
-                fontFamily: 'inherit',
+                width: '100%',
               }}
             />
             {query && (
@@ -306,10 +321,13 @@ serialization step. Saving is \`doc.toString()\` plus line-ending restoration.
           ) : (
             visibleDocuments.map((doc) => {
               const isActive = doc.id === activeId;
+              const isEditing = doc.id === editingId;
+
               return (
                 <div
                   key={doc.id}
                   onClick={() => setActiveDoc(doc.id)}
+                  onDoubleClick={(e) => handleStartRename(doc.id, doc.meta.fileName, e)}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -326,22 +344,57 @@ serialization step. Saving is \`doc.toString()\` plus line-ending restoration.
                   }}
                   onMouseEnter={(e) => {
                     if (!isActive) e.currentTarget.style.backgroundColor = 'var(--as-bg-hover)';
+                    const actions = e.currentTarget.querySelector('.as-note-actions') as HTMLElement;
+                    if (actions) actions.style.opacity = '1';
                   }}
                   onMouseLeave={(e) => {
                     if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
+                    const actions = e.currentTarget.querySelector('.as-note-actions') as HTMLElement;
+                    if (actions) actions.style.opacity = '0';
                   }}
                 >
                   <FileText size={14} style={{ opacity: isActive ? 1 : 0.6, flexShrink: 0 }} />
-                  <span
-                    style={{
-                      flex: 1,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {doc.meta.fileName}
-                  </span>
+
+                  {isEditing ? (
+                    <input
+                      autoFocus
+                      type="text"
+                      value={editingName}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => setEditingName(e.target.value)}
+                      onBlur={() => handleFinishRename(doc.id)}
+                      onKeyDown={(e) => {
+                        e.stopPropagation();
+                        if (e.key === 'Enter') {
+                          handleFinishRename(doc.id);
+                        } else if (e.key === 'Escape') {
+                          setEditingId(null);
+                        }
+                      }}
+                      style={{
+                        flex: 1,
+                        fontSize: '12.5px',
+                        padding: '2px 4px',
+                        color: 'var(--as-text)',
+                        backgroundColor: 'var(--as-bg-surface)',
+                        border: '1px solid var(--as-accent)',
+                        borderRadius: '3px',
+                        outline: 'none',
+                      }}
+                    />
+                  ) : (
+                    <span
+                      title="Double-click to rename note"
+                      style={{
+                        flex: 1,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {doc.meta.fileName}
+                    </span>
+                  )}
 
                   {doc.isDirty && (
                     <span
@@ -355,13 +408,21 @@ serialization step. Saving is \`doc.toString()\` plus line-ending restoration.
                     />
                   )}
 
-                  {documents.length > 1 && (
+                  {/* Actions: Rename & Close */}
+                  <div
+                    className="as-note-actions"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '3px',
+                      opacity: 0,
+                      transition: 'opacity var(--as-transition-fast)',
+                    }}
+                  >
                     <button
                       type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        closeDoc(doc.id);
-                      }}
+                      title="Rename Note"
+                      onClick={(e) => handleStartRename(doc.id, doc.meta.fileName, e)}
                       style={{
                         background: 'none',
                         border: 'none',
@@ -371,14 +432,34 @@ serialization step. Saving is \`doc.toString()\` plus line-ending restoration.
                         borderRadius: '3px',
                         display: 'flex',
                         alignItems: 'center',
-                        opacity: 0.6,
                       }}
-                      onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
-                      onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.6')}
                     >
-                      <X size={11} />
+                      <Pencil size={11} />
                     </button>
-                  )}
+
+                    {documents.length > 1 && (
+                      <button
+                        type="button"
+                        title="Close Note"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          closeDoc(doc.id);
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--as-text-dim)',
+                          cursor: 'pointer',
+                          padding: '2px',
+                          borderRadius: '3px',
+                          display: 'flex',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <X size={11} />
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })

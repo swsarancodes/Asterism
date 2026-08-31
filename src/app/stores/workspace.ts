@@ -90,6 +90,7 @@ export interface WorkspaceState {
   setActiveDocument: (id: string) => void;
   closeDocument: (id: string) => void;
   updateDocumentContent: (id: string, newContent: string) => void;
+  renameDocument: (id: string, newName: string) => void;
   markDocumentSaved: (id: string, newPath?: string) => void;
   updateCursorStats: (line: number, col: number, docText: string) => void;
 }
@@ -148,6 +149,28 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         activeDocumentId: nextActive,
       };
     });
+  },
+
+  renameDocument: (id: string, newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    const finalName = trimmed.includes('.') ? trimmed : `${trimmed}.md`;
+
+    set((state) => ({
+      documents: state.documents.map((doc) => {
+        if (doc.id === id) {
+          return {
+            ...doc,
+            isDirty: true,
+            meta: {
+              ...doc.meta,
+              fileName: finalName,
+            },
+          };
+        }
+        return doc;
+      }),
+    }));
   },
 
   updateDocumentContent: (id: string, newContent: string) => {
