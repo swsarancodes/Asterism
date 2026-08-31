@@ -1,7 +1,7 @@
 # 06 — Repo Structure
 
 ```
-asterism/
+manicule/
 ├── README.md
 ├── CONTRIBUTING.md
 ├── LICENSE                          MIT

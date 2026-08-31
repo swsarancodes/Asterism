@@ -112,7 +112,7 @@ The critical path runs M0 → M1 → **M2**. M2 is the make-or-break spike.
 | Create / rename / delete / move | With undo where safe |
 
 **Exit criteria**
-- Editing the file in Vim while Asterism is open produces correct reconciliation
+- Editing the file in Vim while Manicule is open produces correct reconciliation
   in all three states (clean / dirty / deleted).
 - Our own saves never trigger a reload prompt.
 - 10k-file vault opens without UI jank.
@@ -206,4 +206,4 @@ Unordered. Driven by what users actually ask for.
 3. **One milestone at a time.** Do not start M5 widgets during M2.
 4. **Measure, don't assume.** Every perf claim needs a benchmark number.
 5. **Write in it.** From M2 onward, the maintainers draft these very docs in
-   Asterism. Nothing surfaces bugs faster than depending on your own tool.
+   Manicule. Nothing surfaces bugs faster than depending on your own tool.

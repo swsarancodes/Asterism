@@ -83,8 +83,8 @@ The plain Markdown text in CodeMirror 6 is the *only* document model. We conceal
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/swsarancodes/Asterism.git
-cd Asterism
+git clone https://github.com/swsarancodes/Maincule.git
+cd Maincule
 
 # 2. Install frontend dependencies
 bun install

@@ -1,7 +1,7 @@
 # 03 — Editor Core Spec
 
-This is the most important document in the repo. It specifies the hybrid
-rendering system — the thing that makes Asterism Asterism. Read it fully before
+This is the normative spec for the hybrid Markdown editor core and decoration
+rendering system — the thing that makes Manicule Manicule. Read it fully before
 touching anything under `src/editor/`.
 
 ---

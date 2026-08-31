@@ -136,7 +136,7 @@ Each feature lists acceptance criteria. If a criterion can't be tested, rewrite 
 | F2 | Export PDF via print pipeline | P1 | M6 |
 | F3 | Copy selection as rich text | P1 | M6 |
 | F4 | Copy as HTML | P2 | M7 |
-| F5 | CLI: `asterism <file>` | P2 | M7 |
+| F5 | CLI: `manicule <file>` | P2 | M7 |
 
 ---
 
