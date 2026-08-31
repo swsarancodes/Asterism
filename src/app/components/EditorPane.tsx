@@ -1,10 +1,12 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { EditorView } from '@codemirror/view';
 import { EditorState } from '@codemirror/state';
 import { createEditorExtensions } from '../../editor/setup';
 import { modeCompartment, getModeExtensions, ViewMode } from '../../editor/modes/view-mode';
 import { useWorkspaceStore } from '../stores/workspace';
 import { useSettingsStore } from '../stores/settings';
+import { FloatingToolbar } from './FloatingToolbar';
+import { SlashCommandMenu } from './SlashCommandMenu';
 
 interface EditorPaneProps {
   modeOverride?: ViewMode;
@@ -24,6 +26,15 @@ export const EditorPane: React.FC<EditorPaneProps> = ({ modeOverride }) => {
   const globalMode = useSettingsStore((s) => s.mode);
   const effectiveMode = modeOverride || globalMode;
 
+  // Floating toolbar state (on text selection)
+  const [floatingPos, setFloatingPos] = useState<{ top: number; left: number } | null>(null);
+
+  // Slash command menu state (on typing /)
+  const [slashOpen, setSlashOpen] = useState(false);
+  const [slashQuery, setSlashQuery] = useState('');
+  const [slashPos, setSlashPos] = useState<{ top: number; left: number } | null>(null);
+  const [slashRange, setSlashRange] = useState<{ from: number; to: number } | null>(null);
+
   // Initialize CodeMirror EditorView
   useEffect(() => {
     if (!containerRef.current) return;
@@ -39,8 +50,42 @@ export const EditorPane: React.FC<EditorPaneProps> = ({ modeOverride }) => {
         }
       },
       onCursorChange: (line, col) => {
-        if (viewRef.current) {
-          updateCursorStats(line, col, viewRef.current.state.doc.toString());
+        const view = viewRef.current;
+        if (!view) return;
+
+        updateCursorStats(line, col, view.state.doc.toString());
+
+        const sel = view.state.selection.main;
+
+        // 1. Handle Floating Selection Toolbar
+        if (!sel.empty && sel.to > sel.from) {
+          const coords = view.coordsAtPos(sel.from);
+          if (coords) {
+            setFloatingPos({ top: coords.top, left: coords.left + (sel.to - sel.from) * 4 });
+          }
+          setSlashOpen(false);
+        } else {
+          setFloatingPos(null);
+
+          // 2. Handle Slash Command Menu (/)
+          const head = sel.head;
+          const lineObj = view.state.doc.lineAt(head);
+          const textBefore = lineObj.text.slice(0, head - lineObj.from);
+          const slashMatch = textBefore.match(/\/([a-zA-Z0-9_\-]*)$/);
+
+          if (slashMatch) {
+            const queryStr = slashMatch[1];
+            const startPos = head - slashMatch[0].length;
+            const coords = view.coordsAtPos(head);
+            if (coords) {
+              setSlashPos({ top: coords.bottom, left: coords.left });
+              setSlashRange({ from: startPos, to: head });
+              setSlashQuery(queryStr);
+              setSlashOpen(true);
+            }
+          } else {
+            setSlashOpen(false);
+          }
         }
       },
     });
@@ -61,7 +106,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({ modeOverride }) => {
       view.destroy();
       viewRef.current = null;
     };
-  }, [activeDocId]); // Recreate when switching document
+  }, [activeDocId]);
 
   // Update mode without destroying the view or losing state
   useEffect(() => {
@@ -80,6 +125,19 @@ export const EditorPane: React.FC<EditorPaneProps> = ({ modeOverride }) => {
         overflow: 'hidden',
         position: 'relative',
       }}
-    />
+    >
+      {/* Floating Selection Toolbar (Bubble Menu) */}
+      <FloatingToolbar view={viewRef.current} position={floatingPos} />
+
+      {/* Notion-style Slash Command Menu (/) */}
+      <SlashCommandMenu
+        view={viewRef.current}
+        isOpen={slashOpen}
+        query={slashQuery}
+        position={slashPos}
+        slashRange={slashRange}
+        onClose={() => setSlashOpen(false)}
+      />
+    </div>
   );
 };

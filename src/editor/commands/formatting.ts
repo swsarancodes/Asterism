@@ -1,0 +1,203 @@
+import { EditorView } from '@codemirror/view';
+import { EditorSelection } from '@codemirror/state';
+
+/**
+ * Wraps or unwraps selection with given delimiter (e.g. ** for bold, * for italic)
+ */
+export function toggleInlineFormat(view: EditorView, delimiter: string) {
+  const { state } = view;
+  const changes = state.selection.ranges.map((range) => {
+    const from = range.from;
+    const to = range.to;
+    const dLen = delimiter.length;
+
+    // Check if range is already surrounded by delimiter
+    const before = state.doc.sliceString(Math.max(0, from - dLen), from);
+    const after = state.doc.sliceString(to, Math.min(state.doc.length, to + dLen));
+
+    if (before === delimiter && after === delimiter) {
+      // Unwrap
+      return {
+        from: from - dLen,
+        to: to + dLen,
+        insert: state.doc.sliceString(from, to),
+      };
+    }
+
+    // Check if selection contains delimiter inside
+    const selectedText = state.doc.sliceString(from, to);
+    if (selectedText.startsWith(delimiter) && selectedText.endsWith(delimiter) && selectedText.length >= dLen * 2) {
+      return {
+        from,
+        to,
+        insert: selectedText.slice(dLen, -dLen),
+      };
+    }
+
+    // Wrap
+    return {
+      from,
+      to,
+      insert: `${delimiter}${selectedText || 'text'}${delimiter}`,
+    };
+  });
+
+  view.dispatch({ changes });
+  view.focus();
+}
+
+/**
+ * Formats current line / selection into a heading level (1, 2, 3)
+ */
+export function setHeadingLevel(view: EditorView, level: 1 | 2 | 3 | 0) {
+  const { state } = view;
+  const head = state.selection.main.head;
+  const line = state.doc.lineAt(head);
+  const lineText = line.text;
+
+  // Strip existing heading or list markers
+  const cleanText = lineText.replace(/^(#{1,6}\s+|-\s+|1\.\s+|-\s*\[[ xX]\]\s+|>\s*)/, '');
+  const prefix = level === 0 ? '' : '#'.repeat(level) + ' ';
+  const newLineText = `${prefix}${cleanText}`;
+
+  view.dispatch({
+    changes: { from: line.from, to: line.to, insert: newLineText },
+    selection: EditorSelection.cursor(line.from + newLineText.length),
+  });
+  view.focus();
+}
+
+/**
+ * Formats current line into a bullet list item
+ */
+export function setBulletList(view: EditorView) {
+  const { state } = view;
+  const line = state.doc.lineAt(state.selection.main.head);
+  const cleanText = line.text.replace(/^(#{1,6}\s+|-\s+|1\.\s+|-\s*\[[ xX]\]\s+|>\s*)/, '');
+  const newLineText = `- ${cleanText}`;
+
+  view.dispatch({
+    changes: { from: line.from, to: line.to, insert: newLineText },
+  });
+  view.focus();
+}
+
+/**
+ * Formats current line into a numbered list item
+ */
+export function setNumberedList(view: EditorView) {
+  const { state } = view;
+  const line = state.doc.lineAt(state.selection.main.head);
+  const cleanText = line.text.replace(/^(#{1,6}\s+|-\s+|1\.\s+|-\s*\[[ xX]\]\s+|>\s*)/, '');
+  const newLineText = `1. ${cleanText}`;
+
+  view.dispatch({
+    changes: { from: line.from, to: line.to, insert: newLineText },
+  });
+  view.focus();
+}
+
+/**
+ * Formats current line into a task list item
+ */
+export function setTaskList(view: EditorView) {
+  const { state } = view;
+  const line = state.doc.lineAt(state.selection.main.head);
+  const cleanText = line.text.replace(/^(#{1,6}\s+|-\s+|1\.\s+|-\s*\[[ xX]\]\s+|>\s*)/, '');
+  const newLineText = `- [ ] ${cleanText}`;
+
+  view.dispatch({
+    changes: { from: line.from, to: line.to, insert: newLineText },
+  });
+  view.focus();
+}
+
+/**
+ * Inserts a Notion-style table template
+ */
+export function insertTableTemplate(view: EditorView, replaceRange?: { from: number; to: number }) {
+  const tableMarkdown = `| Item | Description | Status |
+| :--- | :--- | :---: |
+| Task 1 | First objective | In Progress |
+| Task 2 | Next milestone | Pending |`;
+
+  const { state } = view;
+  const target = replaceRange || { from: state.selection.main.from, to: state.selection.main.to };
+
+  view.dispatch({
+    changes: { from: target.from, to: target.to, insert: tableMarkdown },
+  });
+  view.focus();
+}
+
+/**
+ * Inserts a Mermaid Diagram template
+ */
+export function insertMermaidTemplate(view: EditorView, replaceRange?: { from: number; to: number }) {
+  const mermaidMarkdown = `\`\`\`mermaid
+flowchart TD
+    A[Start] --> B[Process Step]
+    B --> C{Decision}
+    C -->|Yes| D[Result 1]
+    C -->|No| E[Result 2]
+\`\`\``;
+
+  const { state } = view;
+  const target = replaceRange || { from: state.selection.main.from, to: state.selection.main.to };
+
+  view.dispatch({
+    changes: { from: target.from, to: target.to, insert: mermaidMarkdown },
+  });
+  view.focus();
+}
+
+/**
+ * Inserts a Fenced Code Block template
+ */
+export function insertCodeBlockTemplate(view: EditorView, lang: string = 'typescript', replaceRange?: { from: number; to: number }) {
+  const codeMarkdown = `\`\`\`${lang}
+function example() {
+  console.log("Hello, Asterism!");
+}
+\`\`\``;
+
+  const { state } = view;
+  const target = replaceRange || { from: state.selection.main.from, to: state.selection.main.to };
+
+  view.dispatch({
+    changes: { from: target.from, to: target.to, insert: codeMarkdown },
+  });
+  view.focus();
+}
+
+/**
+ * Inserts a Callout card template
+ */
+export function insertCalloutTemplate(
+  view: EditorView,
+  type: 'NOTE' | 'TIP' | 'IMPORTANT' | 'WARNING' | 'CAUTION',
+  replaceRange?: { from: number; to: number }
+) {
+  const calloutMarkdown = `> [!${type}]
+> Write your ${type.toLowerCase()} content here...`;
+
+  const { state } = view;
+  const target = replaceRange || { from: state.selection.main.from, to: state.selection.main.to };
+
+  view.dispatch({
+    changes: { from: target.from, to: target.to, insert: calloutMarkdown },
+  });
+  view.focus();
+}
+
+/**
+ * Inserts a visual horizontal rule
+ */
+export function insertDividerTemplate(view: EditorView, replaceRange?: { from: number; to: number }) {
+  const { state } = view;
+  const target = replaceRange || { from: state.selection.main.from, to: state.selection.main.to };
+  view.dispatch({
+    changes: { from: target.from, to: target.to, insert: '\n---\n' },
+  });
+  view.focus();
+}
