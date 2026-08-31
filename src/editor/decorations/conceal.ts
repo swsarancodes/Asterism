@@ -9,7 +9,6 @@ const concealedMarkDeco = Decoration.replace({});
  */
 function isNodeFocused(from: number, to: number, view: EditorView): boolean {
   for (const range of view.state.selection.ranges) {
-    // Overlap rule: caret inside or touching boundaries
     if (range.head >= from && range.head <= to) {
       return true;
     }
@@ -27,6 +26,7 @@ function isNodeFocused(from: number, to: number, view: EditorView): boolean {
 export function buildConcealDecorations(view: EditorView): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
   const doc = view.state.doc;
+  const rawRanges: Array<{ from: number; to: number }> = [];
 
   for (const { from, to } of view.visibleRanges) {
     syntaxTree(view.state).iterate({
@@ -35,15 +35,19 @@ export function buildConcealDecorations(view: EditorView): DecorationSet {
       enter: (node) => {
         const name = node.name;
 
+        // Skip anything inside fenced code or tables (they are handled as block widgets)
+        if (name === 'FencedCode' || name === 'Table') {
+          return false;
+        }
+
         // Bold: StrongEmphasis (**text** or __text__)
         if (name === 'StrongEmphasis') {
           if (!isNodeFocused(node.from, node.to, view)) {
-            // Hide the opening and closing markers
             const nodeText = doc.sliceString(node.from, node.to);
             const markerLen = nodeText.startsWith('**') || nodeText.startsWith('__') ? 2 : 0;
             if (markerLen > 0 && node.to - node.from >= markerLen * 2) {
-              builder.add(node.from, node.from + markerLen, concealedMarkDeco);
-              builder.add(node.to - markerLen, node.to, concealedMarkDeco);
+              rawRanges.push({ from: node.from, to: node.from + markerLen });
+              rawRanges.push({ from: node.to - markerLen, to: node.to });
             }
           }
         }
@@ -53,8 +57,8 @@ export function buildConcealDecorations(view: EditorView): DecorationSet {
           if (!isNodeFocused(node.from, node.to, view)) {
             const markerLen = 1;
             if (node.to - node.from >= markerLen * 2) {
-              builder.add(node.from, node.from + markerLen, concealedMarkDeco);
-              builder.add(node.to - markerLen, node.to, concealedMarkDeco);
+              rawRanges.push({ from: node.from, to: node.from + markerLen });
+              rawRanges.push({ from: node.to - markerLen, to: node.to });
             }
           }
         }
@@ -64,8 +68,8 @@ export function buildConcealDecorations(view: EditorView): DecorationSet {
           if (!isNodeFocused(node.from, node.to, view)) {
             const markerLen = 2;
             if (node.to - node.from >= markerLen * 2) {
-              builder.add(node.from, node.from + markerLen, concealedMarkDeco);
-              builder.add(node.to - markerLen, node.to, concealedMarkDeco);
+              rawRanges.push({ from: node.from, to: node.from + markerLen });
+              rawRanges.push({ from: node.to - markerLen, to: node.to });
             }
           }
         }
@@ -79,8 +83,8 @@ export function buildConcealDecorations(view: EditorView): DecorationSet {
               backtickCount++;
             }
             if (backtickCount > 0 && node.to - node.from >= backtickCount * 2) {
-              builder.add(node.from, node.from + backtickCount, concealedMarkDeco);
-              builder.add(node.to - backtickCount, node.to, concealedMarkDeco);
+              rawRanges.push({ from: node.from, to: node.from + backtickCount });
+              rawRanges.push({ from: node.to - backtickCount, to: node.to });
             }
           }
         }
@@ -91,7 +95,7 @@ export function buildConcealDecorations(view: EditorView): DecorationSet {
             const lineText = doc.sliceString(node.from, node.to);
             const match = lineText.match(/^(#{1,6}\s+)/);
             if (match) {
-              builder.add(node.from, node.from + match[1].length, concealedMarkDeco);
+              rawRanges.push({ from: node.from, to: node.from + match[1].length });
             }
           }
         }
@@ -102,15 +106,27 @@ export function buildConcealDecorations(view: EditorView): DecorationSet {
             const linkText = doc.sliceString(node.from, node.to);
             const closeBracketIdx = linkText.indexOf('](');
             if (linkText.startsWith('[') && closeBracketIdx !== -1 && linkText.endsWith(')')) {
-              // Hide opening bracket
-              builder.add(node.from, node.from + 1, concealedMarkDeco);
-              // Hide ](...) portion
-              builder.add(node.from + closeBracketIdx, node.to, concealedMarkDeco);
+              rawRanges.push({ from: node.from, to: node.from + 1 });
+              rawRanges.push({ from: node.from + closeBracketIdx, to: node.to });
             }
           }
         }
       },
     });
+  }
+
+  // Filter valid ranges & sort strictly by from ascending, to ascending
+  const sorted = rawRanges
+    .filter((r) => r.from < r.to)
+    .sort((a, b) => a.from - b.from || a.to - b.to);
+
+  // Eliminate overlaps for replace decorations
+  let lastTo = -1;
+  for (const r of sorted) {
+    if (r.from >= lastTo) {
+      builder.add(r.from, r.to, concealedMarkDeco);
+      lastTo = r.to;
+    }
   }
 
   return builder.finish();

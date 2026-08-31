@@ -28,6 +28,11 @@ export function buildInlineStyleDecorations(view: EditorView): DecorationSet {
       enter: (node) => {
         const name = node.name;
 
+        // Skip anything inside fenced code or tables
+        if (name === 'FencedCode' || name === 'Table') {
+          return false;
+        }
+
         if (name === 'StrongEmphasis') {
           marks.push({ from: node.from, to: node.to, deco: strongDeco });
         } else if (name === 'Emphasis') {
@@ -49,12 +54,12 @@ export function buildInlineStyleDecorations(view: EditorView): DecorationSet {
   }
 
   // Sort strictly by `from` ascending, then `to` ascending
-  marks.sort((a, b) => a.from - b.from || a.to - b.to);
+  const sorted = marks
+    .filter((m) => m.from < m.to)
+    .sort((a, b) => a.from - b.from || a.to - b.to);
 
-  for (const mark of marks) {
-    if (mark.from < mark.to) {
-      builder.add(mark.from, mark.to, mark.deco);
-    }
+  for (const mark of sorted) {
+    builder.add(mark.from, mark.to, mark.deco);
   }
 
   return builder.finish();
