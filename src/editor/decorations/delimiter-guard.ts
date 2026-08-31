@@ -1,5 +1,5 @@
 import { EditorView } from '@codemirror/view';
-import { Extension, EditorSelection, Prec } from '@codemirror/state';
+import { EditorState, Extension, EditorSelection, ChangeSpec, Prec } from '@codemirror/state';
 
 interface DelimiterSpan {
   openFrom: number;
@@ -47,10 +47,10 @@ export function smartBackspace(view: EditorView): boolean {
   const sel = state.selection.main;
   const spans = findInlineSpans(doc);
 
-  // 1. Non-empty selection deletion (e.g. user selected a word or sub-phrase)
+  // 1. Non-empty selection deletion
   if (!sel.empty) {
     for (const span of spans) {
-      // If user selected the entire inner text of a bold tag, delete the whole bold block
+      // If user selected the entire inner text of a bold tag, delete the whole block
       if (sel.from === span.innerFrom && sel.to === span.innerTo) {
         view.dispatch({
           changes: { from: span.openFrom, to: span.closeTo, insert: '' },
@@ -163,6 +163,72 @@ export function smartDelete(view: EditorView): boolean {
   return false;
 }
 
+/**
+ * Transaction filter that automatically normalizes whitespace inside delimiters
+ * (e.g. "**hi **" -> "**hi** ") so deleting words NEVER invalidates CommonMark bold formatting.
+ */
+export const delimiterNormalizer = EditorState.transactionFilter.of((tr) => {
+  if (!tr.docChanged) return tr;
+
+  const newDoc = tr.newDoc.toString();
+  const changes: ChangeSpec[] = [];
+
+  // 1. Normalize Bold: ** text ** ->  **text** 
+  const boldRegex = /\*\*(\s*)([^\*\n]+?)(\s*)\*\*/g;
+  let bm: RegExpExecArray | null;
+  while ((bm = boldRegex.exec(newDoc)) !== null) {
+    const full = bm[0];
+    const leading = bm[1];
+    const core = bm[2];
+    const trailing = bm[3];
+    if (leading.length > 0 || trailing.length > 0) {
+      changes.push({
+        from: bm.index,
+        to: bm.index + full.length,
+        insert: `${leading}**${core}**${trailing}`,
+      });
+    }
+  }
+
+  // 2. Normalize Italic: * text * ->  *text* 
+  const emRegex = /(?<!\*)\*(\s*)([^\*\n]+?)(\s*)\*(?!\*)/g;
+  let em: RegExpExecArray | null;
+  while ((em = emRegex.exec(newDoc)) !== null) {
+    const full = em[0];
+    const leading = em[1];
+    const core = em[2];
+    const trailing = em[3];
+    if (leading.length > 0 || trailing.length > 0) {
+      changes.push({
+        from: em.index,
+        to: em.index + full.length,
+        insert: `${leading}*${core}*${trailing}`,
+      });
+    }
+  }
+
+  // 3. Normalize Strikethrough: ~~ text ~~ ->  ~~text~~ 
+  const strikeRegex = /~~(\s*)([^~\n]+?)(\s*)~~/g;
+  let sm: RegExpExecArray | null;
+  while ((sm = strikeRegex.exec(newDoc)) !== null) {
+    const full = sm[0];
+    const leading = sm[1];
+    const core = sm[2];
+    const trailing = sm[3];
+    if (leading.length > 0 || trailing.length > 0) {
+      changes.push({
+        from: sm.index,
+        to: sm.index + full.length,
+        insert: `${leading}~~${core}~~${trailing}`,
+      });
+    }
+  }
+
+  if (changes.length === 0) return tr;
+
+  return [tr, { changes, sequential: true }];
+});
+
 export function delimiterGuard(): Extension {
   return [
     Prec.highest(EditorView.domEventHandlers({
@@ -183,5 +249,6 @@ export function delimiterGuard(): Extension {
         return false;
       },
     })),
+    delimiterNormalizer,
   ];
 }
