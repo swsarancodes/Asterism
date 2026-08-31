@@ -5,9 +5,9 @@ import { syntaxTree } from '@codemirror/language';
 const concealedMarkDeco = Decoration.replace({});
 
 /**
- * Checks whether any selection range overlaps the node boundaries (inclusive).
+ * Checks whether any selection caret touches a specific marker range (from..to).
  */
-function isNodeFocused(from: number, to: number, view: EditorView): boolean {
+function isMarkerFocused(from: number, to: number, view: EditorView): boolean {
   for (const range of view.state.selection.ranges) {
     if (range.head >= from && range.head <= to) {
       return true;
@@ -21,7 +21,6 @@ function isNodeFocused(from: number, to: number, view: EditorView): boolean {
 
 /**
  * Builds the concealment decoration set for visible ranges.
- * Conceals syntax tokens when the caret is not inside or touching the node.
  */
 export function buildConcealDecorations(view: EditorView): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
@@ -35,18 +34,20 @@ export function buildConcealDecorations(view: EditorView): DecorationSet {
       enter: (node) => {
         const name = node.name;
 
-        // Skip anything inside fenced code or tables (they are handled as block widgets)
+        // Skip anything inside fenced code or tables
         if (name === 'FencedCode' || name === 'Table') {
           return false;
         }
 
         // Bold: StrongEmphasis (**text** or __text__)
         if (name === 'StrongEmphasis') {
-          if (!isNodeFocused(node.from, node.to, view)) {
-            const nodeText = doc.sliceString(node.from, node.to);
-            const markerLen = nodeText.startsWith('**') || nodeText.startsWith('__') ? 2 : 0;
-            if (markerLen > 0 && node.to - node.from >= markerLen * 2) {
+          const nodeText = doc.sliceString(node.from, node.to);
+          const markerLen = nodeText.startsWith('**') || nodeText.startsWith('__') ? 2 : 0;
+          if (markerLen > 0 && node.to - node.from >= markerLen * 2) {
+            if (!isMarkerFocused(node.from, node.from + markerLen, view)) {
               rawRanges.push({ from: node.from, to: node.from + markerLen });
+            }
+            if (!isMarkerFocused(node.to - markerLen, node.to, view)) {
               rawRanges.push({ from: node.to - markerLen, to: node.to });
             }
           }
@@ -54,10 +55,12 @@ export function buildConcealDecorations(view: EditorView): DecorationSet {
 
         // Italic: Emphasis (*text* or _text_)
         else if (name === 'Emphasis') {
-          if (!isNodeFocused(node.from, node.to, view)) {
-            const markerLen = 1;
-            if (node.to - node.from >= markerLen * 2) {
+          const markerLen = 1;
+          if (node.to - node.from >= markerLen * 2) {
+            if (!isMarkerFocused(node.from, node.from + markerLen, view)) {
               rawRanges.push({ from: node.from, to: node.from + markerLen });
+            }
+            if (!isMarkerFocused(node.to - markerLen, node.to, view)) {
               rawRanges.push({ from: node.to - markerLen, to: node.to });
             }
           }
@@ -65,10 +68,12 @@ export function buildConcealDecorations(view: EditorView): DecorationSet {
 
         // Strikethrough: Strikethrough (~~text~~)
         else if (name === 'Strikethrough') {
-          if (!isNodeFocused(node.from, node.to, view)) {
-            const markerLen = 2;
-            if (node.to - node.from >= markerLen * 2) {
+          const markerLen = 2;
+          if (node.to - node.from >= markerLen * 2) {
+            if (!isMarkerFocused(node.from, node.from + markerLen, view)) {
               rawRanges.push({ from: node.from, to: node.from + markerLen });
+            }
+            if (!isMarkerFocused(node.to - markerLen, node.to, view)) {
               rawRanges.push({ from: node.to - markerLen, to: node.to });
             }
           }
@@ -76,37 +81,42 @@ export function buildConcealDecorations(view: EditorView): DecorationSet {
 
         // Inline Code: InlineCode (`code`)
         else if (name === 'InlineCode') {
-          if (!isNodeFocused(node.from, node.to, view)) {
-            const nodeText = doc.sliceString(node.from, node.to);
-            let backtickCount = 0;
-            while (backtickCount < nodeText.length && nodeText[backtickCount] === '`') {
-              backtickCount++;
-            }
-            if (backtickCount > 0 && node.to - node.from >= backtickCount * 2) {
+          const nodeText = doc.sliceString(node.from, node.to);
+          let backtickCount = 0;
+          while (backtickCount < nodeText.length && nodeText[backtickCount] === '`') {
+            backtickCount++;
+          }
+          if (backtickCount > 0 && node.to - node.from >= backtickCount * 2) {
+            if (!isMarkerFocused(node.from, node.from + backtickCount, view)) {
               rawRanges.push({ from: node.from, to: node.from + backtickCount });
+            }
+            if (!isMarkerFocused(node.to - backtickCount, node.to, view)) {
               rawRanges.push({ from: node.to - backtickCount, to: node.to });
             }
           }
         }
 
-        // ATX Headings: Hide # markers when not focused
+        // ATX Headings: Hide # prefix unless caret is directly touching the prefix
         else if (name.startsWith('ATXHeading')) {
-          if (!isNodeFocused(node.from, node.to, view)) {
-            const lineText = doc.sliceString(node.from, node.to);
-            const match = lineText.match(/^(#{1,6}\s+)/);
-            if (match) {
-              rawRanges.push({ from: node.from, to: node.from + match[1].length });
+          const lineText = doc.sliceString(node.from, node.to);
+          const match = lineText.match(/^(#{1,6}\s+)/);
+          if (match) {
+            const prefixEnd = node.from + match[1].length;
+            if (!isMarkerFocused(node.from, prefixEnd, view)) {
+              rawRanges.push({ from: node.from, to: prefixEnd });
             }
           }
         }
 
-        // Link: [text](url) -> conceal [ and ](url) when not focused
+        // Link: [text](url) -> conceal [ and ](url) unless caret touches them
         else if (name === 'Link') {
-          if (!isNodeFocused(node.from, node.to, view)) {
-            const linkText = doc.sliceString(node.from, node.to);
-            const closeBracketIdx = linkText.indexOf('](');
-            if (linkText.startsWith('[') && closeBracketIdx !== -1 && linkText.endsWith(')')) {
+          const linkText = doc.sliceString(node.from, node.to);
+          const closeBracketIdx = linkText.indexOf('](');
+          if (linkText.startsWith('[') && closeBracketIdx !== -1 && linkText.endsWith(')')) {
+            if (!isMarkerFocused(node.from, node.from + 1, view)) {
               rawRanges.push({ from: node.from, to: node.from + 1 });
+            }
+            if (!isMarkerFocused(node.from + closeBracketIdx, node.to, view)) {
               rawRanges.push({ from: node.from + closeBracketIdx, to: node.to });
             }
           }

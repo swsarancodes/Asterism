@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { EditorView } from '@codemirror/view';
 import { EditorState } from '@codemirror/state';
 import { createEditorExtensions } from '../../editor/setup';
-import { modeCompartment, getModeExtensions, ViewMode } from '../../editor/modes/view-mode';
+import { ViewMode } from '../../editor/modes/view-mode';
 import { useWorkspaceStore } from '../stores/workspace';
 import { useSettingsStore } from '../stores/settings';
 import { FloatingToolbar } from './FloatingToolbar';
@@ -35,11 +35,22 @@ export const EditorPane: React.FC<EditorPaneProps> = ({ modeOverride }) => {
   const [slashPos, setSlashPos] = useState<{ top: number; left: number } | null>(null);
   const [slashRange, setSlashRange] = useState<{ from: number; to: number } | null>(null);
 
-  // Initialize CodeMirror EditorView
+  // Initialize and update CodeMirror EditorView on activeDocId or effectiveMode change
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const initialText = activeDoc ? activeDoc.currentText : '';
+    // Retain previous document text if available
+    const initialText = viewRef.current
+      ? viewRef.current.state.doc.toString()
+      : (activeDoc ? activeDoc.currentText : '');
+
+    const prevSelection = viewRef.current ? viewRef.current.state.selection : undefined;
+
+    // Clean up previous view before creating new one
+    if (viewRef.current) {
+      viewRef.current.destroy();
+      viewRef.current = null;
+    }
 
     const extensions = createEditorExtensions({
       initialDoc: initialText,
@@ -58,7 +69,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({ modeOverride }) => {
         const sel = view.state.selection.main;
 
         // 1. Handle Floating Selection Toolbar
-        if (!sel.empty && sel.to > sel.from) {
+        if (!sel.empty && sel.to > sel.from && effectiveMode !== 'source') {
           const coords = view.coordsAtPos(sel.from);
           if (coords) {
             setFloatingPos({ top: coords.top, left: coords.left + (sel.to - sel.from) * 4 });
@@ -68,23 +79,25 @@ export const EditorPane: React.FC<EditorPaneProps> = ({ modeOverride }) => {
           setFloatingPos(null);
 
           // 2. Handle Slash Command Menu (/)
-          const head = sel.head;
-          const lineObj = view.state.doc.lineAt(head);
-          const textBefore = lineObj.text.slice(0, head - lineObj.from);
-          const slashMatch = textBefore.match(/\/([a-zA-Z0-9_\-]*)$/);
+          if (effectiveMode !== 'source') {
+            const head = sel.head;
+            const lineObj = view.state.doc.lineAt(head);
+            const textBefore = lineObj.text.slice(0, head - lineObj.from);
+            const slashMatch = textBefore.match(/\/([a-zA-Z0-9_\-]*)$/);
 
-          if (slashMatch) {
-            const queryStr = slashMatch[1];
-            const startPos = head - slashMatch[0].length;
-            const coords = view.coordsAtPos(head);
-            if (coords) {
-              setSlashPos({ top: coords.bottom, left: coords.left });
-              setSlashRange({ from: startPos, to: head });
-              setSlashQuery(queryStr);
-              setSlashOpen(true);
+            if (slashMatch) {
+              const queryStr = slashMatch[1];
+              const startPos = head - slashMatch[0].length;
+              const coords = view.coordsAtPos(head);
+              if (coords) {
+                setSlashPos({ top: coords.bottom, left: coords.left });
+                setSlashRange({ from: startPos, to: head });
+                setSlashQuery(queryStr);
+                setSlashOpen(true);
+              }
+            } else {
+              setSlashOpen(false);
             }
-          } else {
-            setSlashOpen(false);
           }
         }
       },
@@ -92,6 +105,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({ modeOverride }) => {
 
     const state = EditorState.create({
       doc: initialText,
+      selection: prevSelection,
       extensions,
     });
 
@@ -106,15 +120,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({ modeOverride }) => {
       view.destroy();
       viewRef.current = null;
     };
-  }, [activeDocId]);
-
-  // Update mode without destroying the view or losing state
-  useEffect(() => {
-    if (!viewRef.current) return;
-    viewRef.current.dispatch({
-      effects: modeCompartment.reconfigure(getModeExtensions(effectiveMode)),
-    });
-  }, [effectiveMode]);
+  }, [activeDocId, effectiveMode]);
 
   return (
     <div

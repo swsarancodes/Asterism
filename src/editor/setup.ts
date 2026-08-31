@@ -2,7 +2,7 @@ import { EditorState, Extension } from '@codemirror/state';
 import { EditorView, keymap, drawSelection, dropCursor } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { createMarkdownExtension } from '../core/markdown/grammar';
-import { modeCompartment, getModeExtensions, ViewMode } from './modes/view-mode';
+import { getModeExtensions, ViewMode } from './modes/view-mode';
 
 export interface EditorSetupOptions {
   initialDoc?: string;
@@ -33,7 +33,7 @@ export function createEditorExtensions(options: EditorSetupOptions = {}): Extens
     drawSelection(),
     dropCursor(),
     createMarkdownExtension(),
-    modeCompartment.of(getModeExtensions(mode)),
+    ...getModeExtensions(mode),
     updateListener,
     keymap.of([...defaultKeymap, ...historyKeymap]),
     EditorView.lineWrapping,

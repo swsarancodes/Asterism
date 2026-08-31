@@ -8,14 +8,6 @@ import { CalloutWidget } from './callout';
 import { TaskCheckboxWidget } from './checkbox';
 import { HRWidget } from './hr';
 
-function isRangeFocused(from: number, to: number, state: EditorState): boolean {
-  for (const range of state.selection.ranges) {
-    if (range.head >= from && range.head <= to) return true;
-    if (range.anchor >= from && range.anchor <= to) return true;
-  }
-  return false;
-}
-
 export function buildBlockWidgets(state: EditorState): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
   const doc = state.doc;
@@ -29,54 +21,35 @@ export function buildBlockWidgets(state: EditorState): DecorationSet {
       const nodeFrom = node.from;
       const nodeTo = node.to;
 
-      // 1. Tables: Replace whole Table block when caret is not inside
+      // 1. Tables: Always render interactive Notion-style table widget
       if (name === 'Table') {
-        if (!isRangeFocused(nodeFrom, nodeTo, state)) {
-          const tableText = doc.sliceString(nodeFrom, nodeTo);
-          const widget = new TableWidget(tableText, nodeFrom, nodeTo);
+        const tableText = doc.sliceString(nodeFrom, nodeTo);
+        const widget = new TableWidget(tableText, nodeFrom, nodeTo);
+        decos.push({
+          from: nodeFrom,
+          to: nodeTo,
+          deco: Decoration.replace({ widget, block: true }),
+        });
+        return false; // Don't descend into child table cells
+      }
+
+      // 2. Fenced Code Blocks (Mermaid or Standard Code)
+      else if (name === 'FencedCode') {
+        const blockText = doc.sliceString(nodeFrom, nodeTo);
+        const firstLine = blockText.split('\n')[0] || '';
+        const langMatch = firstLine.match(/^```([a-zA-Z0-9_\-]+)?/);
+        const lang = (langMatch ? langMatch[1] : '')?.toLowerCase() || '';
+
+        if (lang === 'mermaid') {
+          const widget = new MermaidWidget(blockText, nodeFrom, nodeTo);
           decos.push({
             from: nodeFrom,
             to: nodeTo,
             deco: Decoration.replace({ widget, block: true }),
           });
-          return false; // Don't descend into child table cells
-        }
-      }
-
-      // 2. Fenced Code Blocks (Mermaid or Standard Code)
-      else if (name === 'FencedCode') {
-        if (!isRangeFocused(nodeFrom, nodeTo, state)) {
-          const blockText = doc.sliceString(nodeFrom, nodeTo);
-          // Extract language info from first line
-          const firstLine = blockText.split('\n')[0] || '';
-          const langMatch = firstLine.match(/^```([a-zA-Z0-9_\-]+)?/);
-          const lang = (langMatch ? langMatch[1] : '')?.toLowerCase() || '';
-
-          if (lang === 'mermaid') {
-            const widget = new MermaidWidget(blockText, nodeFrom, nodeTo);
-            decos.push({
-              from: nodeFrom,
-              to: nodeTo,
-              deco: Decoration.replace({ widget, block: true }),
-            });
-            return false;
-          } else {
-            const widget = new CodeBlockWidget(blockText, nodeFrom, nodeTo, lang);
-            decos.push({
-              from: nodeFrom,
-              to: nodeTo,
-              deco: Decoration.replace({ widget, block: true }),
-            });
-            return false;
-          }
-        }
-      }
-
-      // 3. Blockquotes / Callouts
-      else if (name === 'Blockquote') {
-        if (!isRangeFocused(nodeFrom, nodeTo, state)) {
-          const quoteText = doc.sliceString(nodeFrom, nodeTo);
-          const widget = new CalloutWidget(quoteText, nodeFrom, nodeTo);
+          return false;
+        } else {
+          const widget = new CodeBlockWidget(blockText, nodeFrom, nodeTo, lang);
           decos.push({
             from: nodeFrom,
             to: nodeTo,
@@ -84,6 +57,18 @@ export function buildBlockWidgets(state: EditorState): DecorationSet {
           });
           return false;
         }
+      }
+
+      // 3. Blockquotes / Callouts
+      else if (name === 'Blockquote') {
+        const quoteText = doc.sliceString(nodeFrom, nodeTo);
+        const widget = new CalloutWidget(quoteText, nodeFrom, nodeTo);
+        decos.push({
+          from: nodeFrom,
+          to: nodeTo,
+          deco: Decoration.replace({ widget, block: true }),
+        });
+        return false;
       }
 
       // 4. Task Markers: [ ] and [x]
@@ -100,14 +85,12 @@ export function buildBlockWidgets(state: EditorState): DecorationSet {
 
       // 5. Horizontal Rules
       else if (name === 'HorizontalRule') {
-        if (!isRangeFocused(nodeFrom, nodeTo, state)) {
-          const widget = new HRWidget();
-          decos.push({
-            from: nodeFrom,
-            to: nodeTo,
-            deco: Decoration.replace({ widget, block: true }),
-          });
-        }
+        const widget = new HRWidget();
+        decos.push({
+          from: nodeFrom,
+          to: nodeTo,
+          deco: Decoration.replace({ widget, block: true }),
+        });
       }
     },
   });
@@ -124,7 +107,6 @@ export function buildBlockWidgets(state: EditorState): DecorationSet {
 
 /**
  * StateField for block widgets (Tables, Mermaid, Code Blocks, Callouts)
- * In CodeMirror 6, block decorations must be provided via StateField, not ViewPlugin.
  */
 export const blockWidgetField = StateField.define<DecorationSet>({
   create(state) {
