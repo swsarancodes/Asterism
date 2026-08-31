@@ -1,8 +1,8 @@
-# Asterism
+# Manicule ☞
 
 > An open-source, distraction-free Markdown studio.
 
-Asterism edits Markdown **visually** — with no preview pane, no compile step, and no AST serialization — while treating your `.md` file as the single source of truth. Bytes you don't touch are bytes we don't rewrite.
+Manicule edits Markdown **visually** — with no preview pane, no compile step, and no AST serialization — while treating your `.md` file as the single source of truth. Bytes you don't touch are bytes we don't rewrite.
 
 ```
 plain .md on disk  ·  no account  ·  zero telemetry  ·  works offline  ·  MIT licensed
@@ -10,7 +10,7 @@ plain .md on disk  ·  no account  ·  zero telemetry  ·  works offline  ·  MI
 
 ---
 
-## Why Asterism?
+## Why Manicule?
 
 Traditional Markdown editors force a compromise:
 
@@ -19,11 +19,11 @@ Traditional Markdown editors force a compromise:
 | **Split-pane** | Source text on the left, HTML preview on the right | Split attention: you read in one pane and write in another. Constant visual context switching. |
 | **WYSIWYG** | Parses Markdown into a rich-text tree (ProseMirror / Slate / Lexical) and re-serializes on save | **Lossy round-trip:** rewrites list markers, collapses custom whitespace, reformats front matter, and mangles raw HTML. |
 
-Asterism takes a third path: **source-of-truth editing with live decorations**.
+Manicule takes a third path: **source-of-truth editing with live decorations**.
 
 The plain Markdown text in CodeMirror 6 is the *only* document model. We conceal syntax tokens visually and apply typography styling directly over the source text. You get visual WYSIWYG ergonomics while maintaining 100% byte fidelity with disk and Git.
 
-> **Correctness Invariant:** If Asterism ever rewrites a line or marker you did not edit, that is a P0 bug.
+> **Correctness Invariant:** If Manicule ever rewrites a line or marker you did not edit, that is a P0 bug.
 
 ---
 
@@ -39,7 +39,7 @@ The plain Markdown text in CodeMirror 6 is the *only* document model. We conceal
 
 ## Features
 
-- **Hybrid Visual Mode (`Cmd+1`)**: Live concealment of syntax tokens (`**bold**`, `*italic*`, `~~strike~~`, `` `code` ``, `[links](url)`, `# headings`) with interactive Notion-style tables and Mermaid diagrams.
+- **Hybrid Visual Mode (`Cmd+1`)**: Live concealment of syntax tokens (`**bold**`, `*italic*`, `~~strike~~`, `` `code` ``, `[links](url)`, `# headings`) with interactive Notion-style tables, bullet dots (`•`), checkboxes, and Mermaid diagrams.
 - **Raw Source Mode (`Cmd+2`)**: Full syntax-highlighted source editor with zero concealment.
 - **Split Mode (`Cmd+3`)**: Side-by-side view with synchronized document state.
 - **Floating Selection Toolbar**: Instant formatting bubble for bold, italic, strikethrough, headings, and lists.
@@ -129,4 +129,4 @@ See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for full details.
 
 ## License
 
-Asterism is licensed under the [MIT License](LICENSE).
+Manicule is licensed under the [MIT License](LICENSE).

@@ -103,9 +103,9 @@ serialization step. Saving is \`doc.toString()\` plus line-ending restoration.
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '16px', color: 'var(--as-accent)' }}>⁂</span>
+            <span style={{ fontSize: '16px', color: 'var(--as-accent)' }}>☞</span>
             <span style={{ fontWeight: 650, fontSize: '13.5px', letterSpacing: '-0.015em', color: 'var(--as-text)' }}>
-              Asterism Studio
+              Manicule Studio
             </span>
           </div>
 

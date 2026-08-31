@@ -299,7 +299,7 @@ flowchart TD
 export function insertCodeBlockTemplate(view: EditorView, lang: string = 'typescript', replaceRange?: { from: number; to: number }) {
   const codeMarkdown = `\`\`\`${lang}
 function example() {
-  console.log("Hello, Asterism!");
+  console.log("Hello, Manicule!");
 }
 \`\`\``;
 

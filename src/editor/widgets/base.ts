@@ -2,7 +2,7 @@ import { WidgetType } from '@codemirror/view';
 import { EditorView } from '@codemirror/view';
 
 /**
- * Base class for all Asterism Markdown block widgets.
+ * Base class for all Manicule Markdown block widgets.
  *
  * Contract:
  * 1. No external state: Widget derives state purely from the text range [from, to].

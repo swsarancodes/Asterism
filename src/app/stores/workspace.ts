@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { DocumentState, createDocumentState } from '../../core/document/document';
 
-const WELCOME_DOC = `# Asterism ⁂
+const WELCOME_DOC = `# Manicule ☞
 
 > An open-source, distraction-free Markdown studio with visual hybrid editing.
 
@@ -10,7 +10,7 @@ The Markdown text **is** the document model. Bytes you don't touch are bytes we 
 ---
 
 > [!NOTE]
-> Asterism edits Markdown visually without an AST serialization step. When you move your cursor away from syntax, it renders cleanly; when your caret enters a node, the raw markdown is revealed instantly.
+> Manicule edits Markdown visually without an AST serialization step. When you move your cursor away from syntax, it renders cleanly; when your caret enters a node, the raw markdown is revealed instantly.
 
 ---
 
@@ -65,7 +65,7 @@ flowchart TD
 ## 5. Fenced Code Blocks
 
 \`\`\`typescript
-interface AsterismDocument {
+interface ManiculeDocument {
   source: string; // The single source of truth
   isByteFaithful: true;
   widgets: ['table', 'mermaid', 'callout', 'checkbox'];
