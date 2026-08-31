@@ -123,19 +123,63 @@
   caret-color: var(--as-caret);
 }
 
-.cm-line {
-  padding: 1px 0;
-  color: var(--as-text);
+/* Base Editor Typography */
+.cm-editor,
+.cm-editor .cm-scroller,
+.cm-editor .cm-content,
+.cm-editor .cm-line {
+  font-family: var(--as-font-body) !important;
 }
 
-.cm-selectionBackground,
-.cm-content ::selection {
-  background-color: var(--as-selection) !important;
+/* Lists & Bullets */
+.as-bullet-dot {
+  display: inline-block;
+  width: 5.5px;
+  height: 5.5px;
+  background-color: var(--as-text);
+  border-radius: 50%;
+  margin-right: 9px;
+  margin-left: 2px;
+  vertical-align: 0.15em;
+  opacity: 0.85;
 }
 
-.cm-cursor {
-  border-left-color: var(--as-caret) !important;
-  border-left-width: 2px !important;
+.as-task-checkbox-wrapper {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 8px;
+  vertical-align: -0.1em;
+}
+
+.as-task-checkbox {
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  border: 1.5px solid var(--as-border-strong);
+  border-radius: 4px;
+  outline: none;
+  cursor: pointer;
+  background-color: var(--as-bg-surface);
+  transition: all var(--as-transition-fast);
+  position: relative;
+  margin: 0;
+}
+
+.as-task-checkbox:checked {
+  background-color: var(--as-accent);
+  border-color: var(--as-accent);
+}
+
+.as-task-checkbox:checked::after {
+  content: '';
+  position: absolute;
+  top: 1.5px;
+  left: 4.5px;
+  width: 4px;
+  height: 7px;
+  border: solid white;
+  border-width: 0 1.8px 1.8px 0;
+  transform: rotate(45deg);
 }
 
 /* Concealed Syntax Tokens */

@@ -1,6 +1,7 @@
 import { Extension, Compartment } from '@codemirror/state';
 import { concealPlugin } from '../decorations/conceal';
 import { inlineStylePlugin } from '../decorations/inline-style';
+import { listWidgetPlugin } from '../decorations/list-widget';
 import { atomicConcealedRanges } from '../decorations/atomic';
 import { blockWidgetField } from '../widgets/plugin';
 
@@ -14,6 +15,6 @@ export function getModeExtensions(mode: ViewMode): Extension[] {
     return [];
   }
 
-  // Hybrid & Split mode: full visual concealment, inline styles, and Notion-like block widgets
-  return [concealPlugin, inlineStylePlugin, atomicConcealedRanges(), blockWidgetField];
+  // Hybrid & Split mode: full visual concealment, inline styles, bullet dots, and Notion-like block widgets
+  return [concealPlugin, inlineStylePlugin, listWidgetPlugin, atomicConcealedRanges(), blockWidgetField];
 }
