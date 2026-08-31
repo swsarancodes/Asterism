@@ -1,5 +1,5 @@
 import { EditorView, KeyBinding } from '@codemirror/view';
-import { EditorSelection } from '@codemirror/state';
+import { EditorSelection, ChangeSpec } from '@codemirror/state';
 
 /**
  * Wraps or unwraps selection with given delimiter (e.g. ** for bold, * for italic)
@@ -18,7 +18,6 @@ export function toggleInlineFormat(view: EditorView, delimiter: string) {
     const after = state.doc.sliceString(pos, Math.min(state.doc.length, pos + dLen));
 
     if (before === delimiter && after === delimiter) {
-      // Remove the surrounding empty delimiter
       view.dispatch({
         changes: { from: pos - dLen, to: pos + dLen, insert: '' },
         selection: EditorSelection.cursor(pos - dLen),
@@ -49,7 +48,6 @@ export function toggleInlineFormat(view: EditorView, delimiter: string) {
     const after = state.doc.sliceString(to, Math.min(state.doc.length, to + dLen));
 
     if (before === delimiter && after === delimiter) {
-      // Unwrap outer delimiters
       newSelFrom = from - dLen;
       newSelTo = to - dLen;
       return {
@@ -73,7 +71,6 @@ export function toggleInlineFormat(view: EditorView, delimiter: string) {
     }
 
     // Split leading and trailing whitespace so delimiter tightly wraps ONLY the inner text
-    // Example: "  hi there  " -> "  **hi there**  "
     const match = selectedText.match(/^(\s*)([\s\S]*?)(\s*)$/);
     const leading = match ? match[1] : '';
     const core = match ? match[2] : selectedText;
@@ -98,68 +95,162 @@ export function toggleInlineFormat(view: EditorView, delimiter: string) {
 }
 
 /**
- * Formats current line / selection into a heading level (1, 2, 3)
+ * Strips leading Markdown block prefixes (headings, lists, quotes, checkboxes)
+ */
+function cleanLinePrefix(text: string): string {
+  return text.replace(/^(#{1,6}\s+|-\s*\[[ xX]\]\s+|-\s+|\*\s+|\d+\.\s+|>\s*)/, '');
+}
+
+/**
+ * Formats all selected lines into a heading level (1, 2, 3, or 0 for paragraph)
  */
 export function setHeadingLevel(view: EditorView, level: 1 | 2 | 3 | 0) {
   const { state } = view;
-  const head = state.selection.main.head;
-  const line = state.doc.lineAt(head);
-  const lineText = line.text;
+  const sel = state.selection.main;
+  const startLine = state.doc.lineAt(sel.from);
+  const endLine = state.doc.lineAt(sel.to);
+  const changes: ChangeSpec[] = [];
 
-  // Strip existing heading or list markers
-  const cleanText = lineText.replace(/^(#{1,6}\s+|-\s+|1\.\s+|-\s*\[[ xX]\]\s+|>\s*)/, '');
   const prefix = level === 0 ? '' : '#'.repeat(level) + ' ';
-  const newLineText = `${prefix}${cleanText}`;
 
-  view.dispatch({
-    changes: { from: line.from, to: line.to, insert: newLineText },
-    selection: EditorSelection.cursor(line.from + newLineText.length),
-  });
+  for (let l = startLine.number; l <= endLine.number; l++) {
+    const line = state.doc.line(l);
+    const clean = cleanLinePrefix(line.text);
+    const newLine = `${prefix}${clean}`;
+    changes.push({ from: line.from, to: line.to, insert: newLine });
+  }
+
+  view.dispatch({ changes });
   view.focus();
 }
 
 /**
- * Formats current line into a bullet list item
+ * Formats all selected lines into a bulleted list item (- item)
+ * If all selected lines are already bullet items, toggles them back to plain text.
  */
 export function setBulletList(view: EditorView) {
   const { state } = view;
-  const line = state.doc.lineAt(state.selection.main.head);
-  const cleanText = line.text.replace(/^(#{1,6}\s+|-\s+|1\.\s+|-\s*\[[ xX]\]\s+|>\s*)/, '');
-  const newLineText = `- ${cleanText}`;
+  const sel = state.selection.main;
+  const startLine = state.doc.lineAt(sel.from);
+  const endLine = state.doc.lineAt(sel.to);
 
-  view.dispatch({
-    changes: { from: line.from, to: line.to, insert: newLineText },
-  });
+  // Check if all lines are already bullet points
+  let allBullets = true;
+  for (let l = startLine.number; l <= endLine.number; l++) {
+    const lineText = state.doc.line(l).text;
+    if (!/^\s*-\s+(?!\[[ xX]\])/.test(lineText) && lineText.trim().length > 0) {
+      allBullets = false;
+      break;
+    }
+  }
+
+  const changes: ChangeSpec[] = [];
+
+  for (let l = startLine.number; l <= endLine.number; l++) {
+    const line = state.doc.line(l);
+    if (!line.text.trim()) continue;
+
+    const clean = cleanLinePrefix(line.text);
+    const newLine = allBullets ? clean : `- ${clean}`;
+    changes.push({ from: line.from, to: line.to, insert: newLine });
+  }
+
+  view.dispatch({ changes });
   view.focus();
 }
 
 /**
- * Formats current line into a numbered list item
+ * Formats all selected lines into a numbered list item (1. item, 2. item, ...)
+ * If all selected lines are already numbered, toggles them back to plain text.
  */
 export function setNumberedList(view: EditorView) {
   const { state } = view;
-  const line = state.doc.lineAt(state.selection.main.head);
-  const cleanText = line.text.replace(/^(#{1,6}\s+|-\s+|1\.\s+|-\s*\[[ xX]\]\s+|>\s*)/, '');
-  const newLineText = `1. ${cleanText}`;
+  const sel = state.selection.main;
+  const startLine = state.doc.lineAt(sel.from);
+  const endLine = state.doc.lineAt(sel.to);
 
-  view.dispatch({
-    changes: { from: line.from, to: line.to, insert: newLineText },
-  });
+  // Check if all lines are already numbered
+  let allNumbered = true;
+  for (let l = startLine.number; l <= endLine.number; l++) {
+    const lineText = state.doc.line(l).text;
+    if (!/^\s*\d+\.\s+/.test(lineText) && lineText.trim().length > 0) {
+      allNumbered = false;
+      break;
+    }
+  }
+
+  const changes: ChangeSpec[] = [];
+  let itemIndex = 1;
+
+  for (let l = startLine.number; l <= endLine.number; l++) {
+    const line = state.doc.line(l);
+    if (!line.text.trim()) continue;
+
+    const clean = cleanLinePrefix(line.text);
+    const newLine = allNumbered ? clean : `${itemIndex}. ${clean}`;
+    if (!allNumbered) itemIndex++;
+    changes.push({ from: line.from, to: line.to, insert: newLine });
+  }
+
+  view.dispatch({ changes });
   view.focus();
 }
 
 /**
- * Formats current line into a task list item
+ * Formats all selected lines into a task list item (- [ ] item)
+ * If all selected lines are already task items, toggles them back to plain text.
  */
 export function setTaskList(view: EditorView) {
   const { state } = view;
-  const line = state.doc.lineAt(state.selection.main.head);
-  const cleanText = line.text.replace(/^(#{1,6}\s+|-\s+|1\.\s+|-\s*\[[ xX]\]\s+|>\s*)/, '');
-  const newLineText = `- [ ] ${cleanText}`;
+  const sel = state.selection.main;
+  const startLine = state.doc.lineAt(sel.from);
+  const endLine = state.doc.lineAt(sel.to);
 
-  view.dispatch({
-    changes: { from: line.from, to: line.to, insert: newLineText },
-  });
+  let allTasks = true;
+  for (let l = startLine.number; l <= endLine.number; l++) {
+    const lineText = state.doc.line(l).text;
+    if (!/^\s*-\s*\[[ xX]\]\s+/.test(lineText) && lineText.trim().length > 0) {
+      allTasks = false;
+      break;
+    }
+  }
+
+  const changes: ChangeSpec[] = [];
+
+  for (let l = startLine.number; l <= endLine.number; l++) {
+    const line = state.doc.line(l);
+    if (!line.text.trim()) continue;
+
+    const clean = cleanLinePrefix(line.text);
+    const newLine = allTasks ? clean : `- [ ] ${clean}`;
+    changes.push({ from: line.from, to: line.to, insert: newLine });
+  }
+
+  view.dispatch({ changes });
+  view.focus();
+}
+
+/**
+ * Formats all selected lines into a quote / blockquote (> item)
+ */
+export function setBlockquote(view: EditorView) {
+  const { state } = view;
+  const sel = state.selection.main;
+  const startLine = state.doc.lineAt(sel.from);
+  const endLine = state.doc.lineAt(sel.to);
+
+  const changes: ChangeSpec[] = [];
+
+  for (let l = startLine.number; l <= endLine.number; l++) {
+    const line = state.doc.line(l);
+    if (!line.text.trim()) continue;
+
+    const clean = cleanLinePrefix(line.text);
+    const newLine = `> ${clean}`;
+    changes.push({ from: line.from, to: line.to, insert: newLine });
+  }
+
+  view.dispatch({ changes });
   view.focus();
 }
 
@@ -260,7 +351,9 @@ export function insertDividerTemplate(view: EditorView, replaceRange?: { from: n
  * ⌘E / Ctrl+E -> Inline Code
  * ⌘⇧X / ⌘⇧S -> Strikethrough
  * ⌘⌥1 / ⌘⌥2 / ⌘⌥3 -> Headings
- * ⌘⇧7 / ⌘⇧8 / ⌘⇧9 -> Lists
+ * ⌘⇧8 -> Bulleted list
+ * ⌘⇧7 -> Numbered list
+ * ⌘⇧9 -> To-do checklist
  */
 export const markdownFormattingKeymap: KeyBinding[] = [
   {
@@ -327,16 +420,16 @@ export const markdownFormattingKeymap: KeyBinding[] = [
     },
   },
   {
-    key: 'Mod-Shift-7',
+    key: 'Mod-Shift-8',
     run: (view) => {
-      setNumberedList(view);
+      setBulletList(view);
       return true;
     },
   },
   {
-    key: 'Mod-Shift-8',
+    key: 'Mod-Shift-7',
     run: (view) => {
-      setBulletList(view);
+      setNumberedList(view);
       return true;
     },
   },
