@@ -3,6 +3,7 @@ import { EditorView, keymap, drawSelection, dropCursor } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { createMarkdownExtension } from '../core/markdown/grammar';
 import { getModeExtensions, ViewMode } from './modes/view-mode';
+import { markdownFormattingKeymap } from './commands/formatting';
 
 export interface EditorSetupOptions {
   initialDoc?: string;
@@ -35,7 +36,7 @@ export function createEditorExtensions(options: EditorSetupOptions = {}): Extens
     createMarkdownExtension(),
     ...getModeExtensions(mode),
     updateListener,
-    keymap.of([...defaultKeymap, ...historyKeymap]),
+    keymap.of([...markdownFormattingKeymap, ...defaultKeymap, ...historyKeymap]),
     EditorView.lineWrapping,
   ];
 }

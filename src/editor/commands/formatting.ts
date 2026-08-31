@@ -1,4 +1,4 @@
-import { EditorView } from '@codemirror/view';
+import { EditorView, KeyBinding } from '@codemirror/view';
 import { EditorSelection } from '@codemirror/state';
 
 /**
@@ -7,19 +7,42 @@ import { EditorSelection } from '@codemirror/state';
 export function toggleInlineFormat(view: EditorView, delimiter: string) {
   const { state } = view;
   const dLen = delimiter.length;
+  const mainSel = state.selection.main;
+
+  // 1. If selection is collapsed (empty caret), insert empty delimiters and place cursor in the middle
+  if (mainSel.empty) {
+    const pos = mainSel.from;
+
+    // Check if cursor is already inside empty delimiters (e.g. **|**) -> unwrap/exit
+    const before = state.doc.sliceString(Math.max(0, pos - dLen), pos);
+    const after = state.doc.sliceString(pos, Math.min(state.doc.length, pos + dLen));
+
+    if (before === delimiter && after === delimiter) {
+      // Remove the surrounding empty delimiter
+      view.dispatch({
+        changes: { from: pos - dLen, to: pos + dLen, insert: '' },
+        selection: EditorSelection.cursor(pos - dLen),
+      });
+      view.focus();
+      return;
+    }
+
+    // Insert delimiter pair and place cursor between them
+    view.dispatch({
+      changes: { from: pos, to: pos, insert: `${delimiter}${delimiter}` },
+      selection: EditorSelection.cursor(pos + dLen),
+    });
+    view.focus();
+    return;
+  }
+
+  // 2. If text is selected, wrap or unwrap
+  let newSelFrom = mainSel.from;
+  let newSelTo = mainSel.to;
 
   const changes = state.selection.ranges.map((range) => {
     const from = range.from;
     const to = range.to;
-
-    // Check if selection is empty: insert placeholder and select it
-    if (from === to) {
-      return {
-        from,
-        to,
-        insert: `${delimiter}text${delimiter}`,
-      };
-    }
 
     // Check if range is already surrounded by delimiter
     const before = state.doc.sliceString(Math.max(0, from - dLen), from);
@@ -27,6 +50,8 @@ export function toggleInlineFormat(view: EditorView, delimiter: string) {
 
     if (before === delimiter && after === delimiter) {
       // Unwrap outer delimiters
+      newSelFrom = from - dLen;
+      newSelTo = to - dLen;
       return {
         from: from - dLen,
         to: to + dLen,
@@ -38,6 +63,8 @@ export function toggleInlineFormat(view: EditorView, delimiter: string) {
 
     // Check if selection contains delimiter inside
     if (selectedText.startsWith(delimiter) && selectedText.endsWith(delimiter) && selectedText.length >= dLen * 2) {
+      newSelFrom = from;
+      newSelTo = to - dLen * 2;
       return {
         from,
         to,
@@ -52,14 +79,21 @@ export function toggleInlineFormat(view: EditorView, delimiter: string) {
     const core = match ? match[2] : selectedText;
     const trailing = match ? match[3] : '';
 
+    const insertedText = `${leading}${delimiter}${core || 'text'}${delimiter}${trailing}`;
+    newSelFrom = from + leading.length;
+    newSelTo = newSelFrom + dLen + (core || 'text').length + dLen;
+
     return {
       from,
       to,
-      insert: `${leading}${delimiter}${core || 'text'}${delimiter}${trailing}`,
+      insert: insertedText,
     };
   });
 
-  view.dispatch({ changes });
+  view.dispatch({
+    changes,
+    selection: EditorSelection.range(newSelFrom, newSelTo),
+  });
   view.focus();
 }
 
@@ -218,3 +252,99 @@ export function insertDividerTemplate(view: EditorView, replaceRange?: { from: n
   });
   view.focus();
 }
+
+/**
+ * Standard Markdown Keyboard Shortcuts:
+ * ⌘B / Ctrl+B -> Bold
+ * ⌘I / Ctrl+I -> Italic
+ * ⌘E / Ctrl+E -> Inline Code
+ * ⌘⇧X / ⌘⇧S -> Strikethrough
+ * ⌘⌥1 / ⌘⌥2 / ⌘⌥3 -> Headings
+ * ⌘⇧7 / ⌘⇧8 / ⌘⇧9 -> Lists
+ */
+export const markdownFormattingKeymap: KeyBinding[] = [
+  {
+    key: 'Mod-b',
+    run: (view) => {
+      toggleInlineFormat(view, '**');
+      return true;
+    },
+  },
+  {
+    key: 'Mod-i',
+    run: (view) => {
+      toggleInlineFormat(view, '*');
+      return true;
+    },
+  },
+  {
+    key: 'Mod-e',
+    run: (view) => {
+      toggleInlineFormat(view, '`');
+      return true;
+    },
+  },
+  {
+    key: 'Mod-Shift-x',
+    run: (view) => {
+      toggleInlineFormat(view, '~~');
+      return true;
+    },
+  },
+  {
+    key: 'Mod-Shift-s',
+    run: (view) => {
+      toggleInlineFormat(view, '~~');
+      return true;
+    },
+  },
+  {
+    key: 'Mod-Alt-1',
+    run: (view) => {
+      setHeadingLevel(view, 1);
+      return true;
+    },
+  },
+  {
+    key: 'Mod-Alt-2',
+    run: (view) => {
+      setHeadingLevel(view, 2);
+      return true;
+    },
+  },
+  {
+    key: 'Mod-Alt-3',
+    run: (view) => {
+      setHeadingLevel(view, 3);
+      return true;
+    },
+  },
+  {
+    key: 'Mod-Alt-0',
+    run: (view) => {
+      setHeadingLevel(view, 0);
+      return true;
+    },
+  },
+  {
+    key: 'Mod-Shift-7',
+    run: (view) => {
+      setNumberedList(view);
+      return true;
+    },
+  },
+  {
+    key: 'Mod-Shift-8',
+    run: (view) => {
+      setBulletList(view);
+      return true;
+    },
+  },
+  {
+    key: 'Mod-Shift-9',
+    run: (view) => {
+      setTaskList(view);
+      return true;
+    },
+  },
+];
