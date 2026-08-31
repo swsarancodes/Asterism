@@ -13,6 +13,8 @@ import {
   ListOrdered,
   CheckSquare,
   ChevronDown,
+  Workflow,
+  Table as TableIcon,
 } from 'lucide-react';
 import {
   toggleInlineFormat,
@@ -20,6 +22,8 @@ import {
   setBulletList,
   setNumberedList,
   setTaskList,
+  insertMermaidTemplate,
+  insertTableTemplate,
 } from '../../editor/commands/formatting';
 
 interface FloatingToolbarProps {
@@ -119,6 +123,8 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({ view, position
               { label: 'Bulleted List', icon: List, action: () => setBulletList(view) },
               { label: 'Numbered List', icon: ListOrdered, action: () => setNumberedList(view) },
               { label: 'To-do List', icon: CheckSquare, action: () => setTaskList(view) },
+              { label: 'Table', icon: TableIcon, action: () => insertTableTemplate(view) },
+              { label: 'Mermaid Diagram', icon: Workflow, action: () => insertMermaidTemplate(view) },
             ].map((item, idx) => {
               const Icon = item.icon;
               return (
@@ -214,6 +220,32 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({ view, position
         onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
       >
         <Link size={14} />
+      </button>
+
+      <div style={{ width: '1px', height: '18px', backgroundColor: 'var(--as-border)', margin: '0 3px' }} />
+
+      {/* Table */}
+      <button
+        type="button"
+        title="Insert Table"
+        onClick={() => insertTableTemplate(view)}
+        style={toolbarBtnStyle}
+        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--as-bg-hover)')}
+        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+      >
+        <TableIcon size={14} />
+      </button>
+
+      {/* Mermaid Diagram */}
+      <button
+        type="button"
+        title="Insert Mermaid Diagram"
+        onClick={() => insertMermaidTemplate(view)}
+        style={toolbarBtnStyle}
+        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--as-bg-hover)')}
+        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+      >
+        <Workflow size={14} />
       </button>
     </div>
   );
