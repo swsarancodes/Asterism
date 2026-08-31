@@ -5,22 +5,8 @@ import { syntaxTree } from '@codemirror/language';
 const concealedMarkDeco = Decoration.replace({});
 
 /**
- * Checks whether any selection caret touches a specific marker range (from..to).
- */
-function isMarkerFocused(from: number, to: number, view: EditorView): boolean {
-  for (const range of view.state.selection.ranges) {
-    if (range.head >= from && range.head <= to) {
-      return true;
-    }
-    if (range.anchor >= from && range.anchor <= to) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/**
  * Builds the concealment decoration set for visible ranges.
+ * Conceals opening/closing syntax tokens so text renders visually like Notion.
  */
 export function buildConcealDecorations(view: EditorView): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
@@ -34,7 +20,7 @@ export function buildConcealDecorations(view: EditorView): DecorationSet {
       enter: (node) => {
         const name = node.name;
 
-        // Skip anything inside fenced code or tables
+        // Skip anything inside fenced code or tables (they are block widgets)
         if (name === 'FencedCode' || name === 'Table') {
           return false;
         }
@@ -44,12 +30,8 @@ export function buildConcealDecorations(view: EditorView): DecorationSet {
           const nodeText = doc.sliceString(node.from, node.to);
           const markerLen = nodeText.startsWith('**') || nodeText.startsWith('__') ? 2 : 0;
           if (markerLen > 0 && node.to - node.from >= markerLen * 2) {
-            if (!isMarkerFocused(node.from, node.from + markerLen, view)) {
-              rawRanges.push({ from: node.from, to: node.from + markerLen });
-            }
-            if (!isMarkerFocused(node.to - markerLen, node.to, view)) {
-              rawRanges.push({ from: node.to - markerLen, to: node.to });
-            }
+            rawRanges.push({ from: node.from, to: node.from + markerLen });
+            rawRanges.push({ from: node.to - markerLen, to: node.to });
           }
         }
 
@@ -57,12 +39,8 @@ export function buildConcealDecorations(view: EditorView): DecorationSet {
         else if (name === 'Emphasis') {
           const markerLen = 1;
           if (node.to - node.from >= markerLen * 2) {
-            if (!isMarkerFocused(node.from, node.from + markerLen, view)) {
-              rawRanges.push({ from: node.from, to: node.from + markerLen });
-            }
-            if (!isMarkerFocused(node.to - markerLen, node.to, view)) {
-              rawRanges.push({ from: node.to - markerLen, to: node.to });
-            }
+            rawRanges.push({ from: node.from, to: node.from + markerLen });
+            rawRanges.push({ from: node.to - markerLen, to: node.to });
           }
         }
 
@@ -70,12 +48,8 @@ export function buildConcealDecorations(view: EditorView): DecorationSet {
         else if (name === 'Strikethrough') {
           const markerLen = 2;
           if (node.to - node.from >= markerLen * 2) {
-            if (!isMarkerFocused(node.from, node.from + markerLen, view)) {
-              rawRanges.push({ from: node.from, to: node.from + markerLen });
-            }
-            if (!isMarkerFocused(node.to - markerLen, node.to, view)) {
-              rawRanges.push({ from: node.to - markerLen, to: node.to });
-            }
+            rawRanges.push({ from: node.from, to: node.from + markerLen });
+            rawRanges.push({ from: node.to - markerLen, to: node.to });
           }
         }
 
@@ -87,38 +61,27 @@ export function buildConcealDecorations(view: EditorView): DecorationSet {
             backtickCount++;
           }
           if (backtickCount > 0 && node.to - node.from >= backtickCount * 2) {
-            if (!isMarkerFocused(node.from, node.from + backtickCount, view)) {
-              rawRanges.push({ from: node.from, to: node.from + backtickCount });
-            }
-            if (!isMarkerFocused(node.to - backtickCount, node.to, view)) {
-              rawRanges.push({ from: node.to - backtickCount, to: node.to });
-            }
+            rawRanges.push({ from: node.from, to: node.from + backtickCount });
+            rawRanges.push({ from: node.to - backtickCount, to: node.to });
           }
         }
 
-        // ATX Headings: Hide # prefix unless caret is directly touching the prefix
+        // ATX Headings: Hide # prefix in visual mode
         else if (name.startsWith('ATXHeading')) {
           const lineText = doc.sliceString(node.from, node.to);
           const match = lineText.match(/^(#{1,6}\s+)/);
           if (match) {
-            const prefixEnd = node.from + match[1].length;
-            if (!isMarkerFocused(node.from, prefixEnd, view)) {
-              rawRanges.push({ from: node.from, to: prefixEnd });
-            }
+            rawRanges.push({ from: node.from, to: node.from + match[1].length });
           }
         }
 
-        // Link: [text](url) -> conceal [ and ](url) unless caret touches them
+        // Link: [text](url) -> conceal [ and ](url)
         else if (name === 'Link') {
           const linkText = doc.sliceString(node.from, node.to);
           const closeBracketIdx = linkText.indexOf('](');
           if (linkText.startsWith('[') && closeBracketIdx !== -1 && linkText.endsWith(')')) {
-            if (!isMarkerFocused(node.from, node.from + 1, view)) {
-              rawRanges.push({ from: node.from, to: node.from + 1 });
-            }
-            if (!isMarkerFocused(node.from + closeBracketIdx, node.to, view)) {
-              rawRanges.push({ from: node.from + closeBracketIdx, to: node.to });
-            }
+            rawRanges.push({ from: node.from, to: node.from + 1 });
+            rawRanges.push({ from: node.from + closeBracketIdx, to: node.to });
           }
         }
       },
@@ -157,7 +120,6 @@ export const concealPlugin = ViewPlugin.fromClass(
       if (
         update.docChanged ||
         update.viewportChanged ||
-        update.selectionSet ||
         syntaxTree(update.state) !== syntaxTree(update.startState)
       ) {
         this.decorations = buildConcealDecorations(update.view);

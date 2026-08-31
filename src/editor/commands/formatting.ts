@@ -6,17 +6,27 @@ import { EditorSelection } from '@codemirror/state';
  */
 export function toggleInlineFormat(view: EditorView, delimiter: string) {
   const { state } = view;
+  const dLen = delimiter.length;
+
   const changes = state.selection.ranges.map((range) => {
     const from = range.from;
     const to = range.to;
-    const dLen = delimiter.length;
+
+    // Check if selection is empty: insert placeholder and select it
+    if (from === to) {
+      return {
+        from,
+        to,
+        insert: `${delimiter}text${delimiter}`,
+      };
+    }
 
     // Check if range is already surrounded by delimiter
     const before = state.doc.sliceString(Math.max(0, from - dLen), from);
     const after = state.doc.sliceString(to, Math.min(state.doc.length, to + dLen));
 
     if (before === delimiter && after === delimiter) {
-      // Unwrap
+      // Unwrap outer delimiters
       return {
         from: from - dLen,
         to: to + dLen,
@@ -24,8 +34,9 @@ export function toggleInlineFormat(view: EditorView, delimiter: string) {
       };
     }
 
-    // Check if selection contains delimiter inside
     const selectedText = state.doc.sliceString(from, to);
+
+    // Check if selection contains delimiter inside
     if (selectedText.startsWith(delimiter) && selectedText.endsWith(delimiter) && selectedText.length >= dLen * 2) {
       return {
         from,
@@ -34,11 +45,17 @@ export function toggleInlineFormat(view: EditorView, delimiter: string) {
       };
     }
 
-    // Wrap
+    // Split leading and trailing whitespace so delimiter tightly wraps ONLY the inner text
+    // Example: "  hi there  " -> "  **hi there**  "
+    const match = selectedText.match(/^(\s*)([\s\S]*?)(\s*)$/);
+    const leading = match ? match[1] : '';
+    const core = match ? match[2] : selectedText;
+    const trailing = match ? match[3] : '';
+
     return {
       from,
       to,
-      insert: `${delimiter}${selectedText || 'text'}${delimiter}`,
+      insert: `${leading}${delimiter}${core || 'text'}${delimiter}${trailing}`,
     };
   });
 
