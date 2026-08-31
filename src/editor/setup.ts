@@ -4,6 +4,7 @@ import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { createMarkdownExtension } from '../core/markdown/grammar';
 import { getModeExtensions, ViewMode } from './modes/view-mode';
 import { markdownFormattingKeymap } from './commands/formatting';
+import { delimiterGuard } from './decorations/delimiter-guard';
 
 export interface EditorSetupOptions {
   initialDoc?: string;
@@ -35,6 +36,7 @@ export function createEditorExtensions(options: EditorSetupOptions = {}): Extens
     dropCursor(),
     createMarkdownExtension(),
     ...getModeExtensions(mode),
+    delimiterGuard(),
     updateListener,
     Prec.highest(keymap.of(markdownFormattingKeymap)),
     keymap.of([...defaultKeymap, ...historyKeymap]),
