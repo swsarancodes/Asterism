@@ -2,11 +2,11 @@ import { EditorView, Decoration, DecorationSet, ViewPlugin, ViewUpdate } from '@
 import { RangeSetBuilder } from '@codemirror/state';
 import { syntaxTree } from '@codemirror/language';
 
-const concealedMarkDeco = Decoration.replace({});
+const concealedMarkDeco = Decoration.mark({ class: 'as-syntax-hidden' });
 
 /**
  * Builds the concealment decoration set for visible ranges.
- * Conceals opening/closing syntax tokens so text renders visually like Notion.
+ * Conceals opening/closing syntax tokens using non-destructive visual span marks.
  */
 export function buildConcealDecorations(view: EditorView): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
@@ -88,12 +88,12 @@ export function buildConcealDecorations(view: EditorView): DecorationSet {
       },
     });
 
-    // 2. Resilient pattern matching for inline syntax markers (e.g. while editing or deleting words)
+    // 2. Resilient pattern matching for inline syntax markers
     const text = doc.sliceString(from, to);
 
     // Bold pattern: **text**
     const boldRegex = /\*\*([^\*\n]+?)\*\*/g;
-    let bm;
+    let bm: RegExpExecArray | null;
     while ((bm = boldRegex.exec(text)) !== null) {
       const start = from + bm.index;
       const end = start + bm[0].length;
@@ -103,7 +103,7 @@ export function buildConcealDecorations(view: EditorView): DecorationSet {
 
     // Strikethrough pattern: ~~text~~
     const strikeRegex = /~~([^~\n]+?)~~/g;
-    let sm;
+    let sm: RegExpExecArray | null;
     while ((sm = strikeRegex.exec(text)) !== null) {
       const start = from + sm.index;
       const end = start + sm[0].length;
@@ -113,7 +113,7 @@ export function buildConcealDecorations(view: EditorView): DecorationSet {
 
     // Inline code pattern: `code`
     const codeRegex = /`([^`\n]+?)`/g;
-    let cm;
+    let cm: RegExpExecArray | null;
     while ((cm = codeRegex.exec(text)) !== null) {
       const start = from + cm.index;
       const end = start + cm[0].length;
@@ -122,18 +122,18 @@ export function buildConcealDecorations(view: EditorView): DecorationSet {
     }
   }
 
-  // Filter valid ranges & sort strictly by from ascending, to ascending
-  const sorted = rawRanges
-    .filter((r) => r.from < r.to)
-    .sort((a, b) => a.from - b.from || a.to - b.to);
-
-  // Eliminate overlaps for replace decorations
-  let lastTo = -1;
-  for (const r of sorted) {
-    if (r.from >= lastTo) {
-      builder.add(r.from, r.to, concealedMarkDeco);
-      lastTo = r.to;
+  // Filter valid ranges & deduplicate
+  const uniqueRanges: Array<{ from: number; to: number }> = [];
+  for (const r of rawRanges) {
+    if (r.from < r.to && !uniqueRanges.some((u) => u.from === r.from && u.to === r.to)) {
+      uniqueRanges.push(r);
     }
+  }
+
+  uniqueRanges.sort((a, b) => a.from - b.from || a.to - b.to);
+
+  for (const r of uniqueRanges) {
+    builder.add(r.from, r.to, concealedMarkDeco);
   }
 
   return builder.finish();
