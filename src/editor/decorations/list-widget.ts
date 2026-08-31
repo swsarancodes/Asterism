@@ -5,6 +5,7 @@ class BulletWidget extends WidgetType {
   toDOM(): HTMLElement {
     const span = document.createElement('span');
     span.className = 'as-bullet-dot';
+    span.textContent = '•';
     span.setAttribute('aria-hidden', 'true');
     return span;
   }

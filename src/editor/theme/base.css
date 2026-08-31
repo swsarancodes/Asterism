@@ -134,14 +134,15 @@
 /* Lists & Bullets */
 .as-bullet-dot {
   display: inline-block;
-  width: 5.5px;
-  height: 5.5px;
-  background-color: var(--as-text);
-  border-radius: 50%;
+  color: var(--as-text);
+  font-size: 1.2em;
+  line-height: 1;
   margin-right: 9px;
   margin-left: 2px;
-  vertical-align: 0.15em;
-  opacity: 0.85;
+  user-select: none;
+  pointer-events: none;
+  vertical-align: -0.05em;
+  font-weight: 700;
 }
 
 .as-task-checkbox-wrapper {
