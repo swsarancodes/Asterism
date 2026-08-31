@@ -9,36 +9,66 @@ The Markdown text **is** the document model. Bytes you don't touch are bytes we 
 
 ---
 
-## 1. Live Hybrid Concealment
+> [!NOTE]
+> Asterism edits Markdown visually without an AST serialization step. When you move your cursor away from syntax, it renders cleanly; when your caret enters a node, the raw markdown is revealed instantly.
 
-Place your cursor inside any formatted text below to reveal its raw Markdown syntax. Move away, and the syntax conceals automatically!
+---
 
-- **Bold emphasis** using double asterisks: \`**Bold emphasis**\`
-- *Italic emphasis* using single asterisks: \`*Italic emphasis*\`
-- ~~Strikethrough text~~ using tildes: \`~~Strikethrough text~~\`
-- \`Inline code tokens\` using backticks: \`\` \`Inline code\` \`\`
-- Clean links: [Asterism Documentation](https://github.com)
+## 1. Live Mermaid Architecture
 
-## 2. Headings & Hierarchy
+\`\`\`mermaid
+flowchart TD
+    A[Markdown File on Disk] -->|Zero Loss Read| B[CodeMirror 6 Text Buffer]
+    B -->|Incremental Parse| C[Lezer Syntax Tree]
+    C -->|Viewport Scoped| D[Hybrid Decoration Engine]
+    D --> E[Notion Tables]
+    D --> F[Mermaid Diagrams]
+    D --> G[Concealed Inline Markdown]
+    D --> H[Rich Callouts]
+    E & F & G & H -->|Transactions Only| B
+    B -->|Atomic Write| A
+\`\`\`
 
-# Heading 1 (ATX)
-## Heading 2 (Subheading)
-### Heading 3 (Section)
+---
 
-## 3. Lists & Checklists
+## 2. Interactive Notion-Style Tables
+
+| Feature | Description | Status |
+| :--- | :--- | :---: |
+| **Hybrid Concealment** | Hide syntax markers on blur | Ready |
+| **Visual Tables** | In-place cell editing with padded writeback | Ready |
+| **Mermaid Diagrams** | Live SVG rendering with rounded cards | Ready |
+| **Lossless Invariant** | Byte-identical round trip | 100% |
+
+---
+
+## 3. Notion & GitHub Callouts
+
+> [!TIP]
+> You can toggle between **Hybrid View** (\`⌘1\`), **Source View** (\`⌘2\`), and **Split View** (\`⌘3\`) anytime using keyboard shortcuts.
+
+> [!IMPORTANT]
+> The search index is a disposable cache. Plain \`.md\` files on disk are always the single source of truth.
+
+---
+
+## 4. Interactive Task List
 
 - [x] Fast incremental parsing with Lezer
-- [x] Zero-loss round-trip fidelity
-- [ ] Try switching to **Source Mode** using the top bar or \`⌘2\`
-- [ ] Try **Split Mode** using \`⌘3\`
+- [x] Interactive clickable task list checkboxes
+- [x] Notion-style tables with column alignment and live editing
+- [x] Live Mermaid diagrams with theme matching
+- [ ] Try creating your own table or diagram below!
 
-## 4. Code Blocks
+---
+
+## 5. Fenced Code Blocks
 
 \`\`\`typescript
-interface EditorCore {
-  doc: string;
-  lossless: boolean;
-  distractionFree: true;
+interface AsterismDocument {
+  source: string; // The single source of truth
+  isByteFaithful: true;
+  widgets: ['table', 'mermaid', 'callout', 'checkbox'];
 }
 \`\`\`
 
@@ -86,7 +116,6 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   openDocument: (content: string, filePath = null) => {
     const doc = createDocumentState(content, filePath);
     set((state) => {
-      // Check if already open
       const existing = state.documents.find((d) => d.meta.filePath === filePath && filePath !== null);
       if (existing) {
         return { activeDocumentId: existing.id };
