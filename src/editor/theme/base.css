@@ -1,0 +1,210 @@
+:root {
+  /* Asterism Theme Tokens */
+  --as-font-body: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+  --as-font-mono: "JetBrains Mono", "SF Mono", Menlo, Monaco, Consolas, monospace;
+  --as-measure: 72ch;
+  --as-font-size: 16px;
+  --as-line-height: 1.75;
+  --as-radius-sm: 6px;
+  --as-radius-md: 10px;
+  --as-radius-lg: 16px;
+  --as-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
+  --as-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --as-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.12);
+  --as-transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --as-transition-smooth: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Light Theme */
+[data-theme="light"], :root {
+  --as-bg: #faf9f7;
+  --as-bg-surface: #ffffff;
+  --as-bg-subtle: #f2f0eb;
+  --as-bg-hover: #eae8e1;
+  --as-bg-active: #dfdcd4;
+  --as-border: #e6e3dc;
+  --as-border-strong: #d4d0c5;
+  --as-text: #1a1a1a;
+  --as-text-muted: #666460;
+  --as-text-dim: #949089;
+  --as-syntax: #b0aca3;
+  --as-accent: #2c5282;
+  --as-accent-hover: #1a365d;
+  --as-accent-subtle: #ebf8ff;
+  --as-code-bg: #f0eee9;
+  --as-code-border: #e2ded5;
+  --as-quote-border: #cbd5e0;
+  --as-hr-color: #e2ded6;
+  --as-selection: #d0e2ff;
+  --as-caret: #1a1a1a;
+}
+
+/* Dark Theme */
+[data-theme="dark"] {
+  --as-bg: #141415;
+  --as-bg-surface: #1c1c1e;
+  --as-bg-subtle: #242428;
+  --as-bg-hover: #2c2c32;
+  --as-bg-active: #383840;
+  --as-border: #2e2e34;
+  --as-border-strong: #3e3e48;
+  --as-text: #ededed;
+  --as-text-muted: #9e9ea6;
+  --as-text-dim: #686872;
+  --as-syntax: #545460;
+  --as-accent: #60a5fa;
+  --as-accent-hover: #93c5fd;
+  --as-accent-subtle: #1e293b;
+  --as-code-bg: #222228;
+  --as-code-border: #32323c;
+  --as-quote-border: #4a5568;
+  --as-hr-color: #2a2a32;
+  --as-selection: #264f78;
+  --as-caret: #60a5fa;
+}
+
+/* Base Editor Styling */
+.cm-editor {
+  font-family: var(--as-font-body);
+  font-size: var(--as-font-size);
+  line-height: var(--as-line-height);
+  color: var(--as-text);
+  background-color: var(--as-bg);
+  height: 100%;
+  outline: none !important;
+}
+
+.cm-scroller {
+  font-family: inherit;
+  padding: 40px 0;
+  display: flex;
+  justify-content: center;
+}
+
+.cm-content {
+  max-width: var(--as-measure);
+  width: 100%;
+  padding: 0 32px 200px 32px;
+  box-sizing: border-box;
+  caret-color: var(--as-caret);
+}
+
+.cm-line {
+  padding: 0;
+  color: var(--as-text);
+}
+
+.cm-selectionBackground,
+.cm-content ::selection {
+  background-color: var(--as-selection) !important;
+}
+
+.cm-cursor {
+  border-left-color: var(--as-caret) !important;
+  border-left-width: 2px !important;
+}
+
+/* Typography & Visual Inline Styles */
+.as-strong {
+  font-weight: 700;
+  color: var(--as-text);
+}
+
+.as-em {
+  font-style: italic;
+}
+
+.as-strike {
+  text-decoration: line-through;
+  opacity: 0.65;
+}
+
+.as-code-inline {
+  font-family: var(--as-font-mono);
+  font-size: 0.88em;
+  background-color: var(--as-code-bg);
+  border: 1px solid var(--as-code-border);
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  color: var(--as-accent);
+}
+
+.as-link {
+  color: var(--as-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.as-h1 {
+  font-size: 2.1em;
+  font-weight: 750;
+  line-height: 1.25;
+  margin-top: 1.2em;
+  margin-bottom: 0.5em;
+  letter-spacing: -0.025em;
+}
+
+.as-h2 {
+  font-size: 1.6em;
+  font-weight: 700;
+  line-height: 1.3;
+  margin-top: 1em;
+  margin-bottom: 0.4em;
+  letter-spacing: -0.015em;
+}
+
+.as-h3 {
+  font-size: 1.3em;
+  font-weight: 650;
+  line-height: 1.35;
+  margin-top: 0.8em;
+  margin-bottom: 0.3em;
+}
+
+.as-h4 {
+  font-size: 1.1em;
+  font-weight: 600;
+  margin-top: 0.6em;
+}
+
+.as-h5, .as-h6 {
+  font-size: 0.95em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--as-text-muted);
+}
+
+.as-quote {
+  border-left: 3px solid var(--as-quote-border);
+  padding-left: 1rem;
+  color: var(--as-text-muted);
+  font-style: italic;
+}
+
+.as-hr-line {
+  display: block;
+  height: 1px;
+  background: var(--as-hr-color);
+  margin: 1.5rem 0;
+}
+
+.as-task-checkbox {
+  cursor: pointer;
+  margin-right: 0.5rem;
+  accent-color: var(--as-accent);
+  vertical-align: middle;
+}
+
+.as-dimmed {
+  opacity: 0.35;
+  transition: opacity var(--as-transition-smooth);
+}
+
+.as-syntax-dim {
+  color: var(--as-syntax);
+  opacity: 0.7;
+  font-family: var(--as-font-mono);
+  font-size: 0.9em;
+}
