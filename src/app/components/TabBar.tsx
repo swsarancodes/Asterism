@@ -1,20 +1,11 @@
 import React from 'react';
-import { useShallow } from 'zustand/react/shallow';
 import { useWorkspaceStore } from '../stores/workspace';
 import { useSettingsStore } from '../stores/settings';
 import { ViewMode } from '../../editor/modes/view-mode';
 import { FileText, Plus, X, Eye, Code, Columns, PanelLeft } from 'lucide-react';
 
 export const TabBar: React.FC = () => {
-  const tabs = useWorkspaceStore(
-    useShallow((s) =>
-      s.documents.map((d) => ({
-        id: d.id,
-        fileName: d.meta.fileName,
-        isDirty: d.isDirty,
-      }))
-    )
-  );
+  const documents = useWorkspaceStore((s) => s.documents);
   const activeId = useWorkspaceStore((s) => s.activeDocumentId);
   const setActiveDoc = useWorkspaceStore((s) => s.setActiveDocument);
   const closeDoc = useWorkspaceStore((s) => s.closeDocument);
@@ -92,7 +83,7 @@ export const TabBar: React.FC = () => {
           </button>
         )}
 
-        {tabs.map((doc) => {
+        {documents.map((doc) => {
           const isActive = doc.id === activeId;
           const isEditing = doc.id === editingId;
 
@@ -100,7 +91,7 @@ export const TabBar: React.FC = () => {
             <div
               key={doc.id}
               onClick={() => setActiveDoc(doc.id)}
-              onDoubleClick={(e) => handleStartRename(doc.id, doc.fileName, e)}
+              onDoubleClick={(e) => handleStartRename(doc.id, doc.meta.fileName, e)}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -151,7 +142,7 @@ export const TabBar: React.FC = () => {
                   }}
                 />
               ) : (
-                <span title="Double-click to rename">{doc.fileName}</span>
+                <span title="Double-click to rename">{doc.meta.fileName}</span>
               )}
 
               {doc.isDirty && (
@@ -165,7 +156,7 @@ export const TabBar: React.FC = () => {
                   }}
                 />
               )}
-              {tabs.length > 1 && (
+              {documents.length > 1 && (
                 <button
                   type="button"
                   onClick={(e) => {

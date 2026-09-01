@@ -80,19 +80,14 @@ export const EditorPane: React.FC<EditorPaneProps> = ({ modeOverride }) => {
   useEffect(() => {
     if (!containerRef.current) return;
 
-    // Retain previous document text if available
-    const currentDoc = useWorkspaceStore.getState().documents.find((d) => d.id === activeDocId);
-    const initialText = viewRef.current
-      ? viewRef.current.state.doc.toString()
-      : (currentDoc ? currentDoc.currentText : '');
-
-    const prevSelection = viewRef.current ? viewRef.current.state.selection : undefined;
-
     // Clean up previous view before creating new one
     if (viewRef.current) {
       viewRef.current.destroy();
       viewRef.current = null;
     }
+
+    const currentDoc = useWorkspaceStore.getState().documents.find((d) => d.id === activeDocId);
+    const initialText = currentDoc ? currentDoc.currentText : '';
 
     const extensions = createEditorExtensions({
       initialDoc: initialText,
@@ -147,7 +142,6 @@ export const EditorPane: React.FC<EditorPaneProps> = ({ modeOverride }) => {
 
     const state = EditorState.create({
       doc: initialText,
-      selection: prevSelection,
       extensions,
     });
 

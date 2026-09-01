@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useShallow } from 'zustand/react/shallow';
 import { useWorkspaceStore } from '../stores/workspace';
 import { useSettingsStore } from '../stores/settings';
 import {
@@ -14,16 +13,7 @@ import {
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
-  const docHeaders = useWorkspaceStore(
-    useShallow((s) =>
-      s.documents.map((d) => ({
-        id: d.id,
-        fileName: d.meta.fileName,
-        isDirty: d.isDirty,
-        filePath: d.meta.filePath,
-      }))
-    )
-  );
+  const documents = useWorkspaceStore((s) => s.documents);
   const activeId = useWorkspaceStore((s) => s.activeDocumentId);
   const setActiveDoc = useWorkspaceStore((s) => s.setActiveDocument);
   const closeDoc = useWorkspaceStore((s) => s.closeDocument);
@@ -39,8 +29,8 @@ export const Sidebar: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
 
-  const visibleDocuments = docHeaders.filter((doc) =>
-    doc.fileName.toLowerCase().includes(query.trim().toLowerCase())
+  const visibleDocuments = documents.filter((doc) =>
+    doc.meta.fileName.toLowerCase().includes(query.trim().toLowerCase())
   );
 
   const handleStartRename = (docId: string, currentName: string, e?: React.MouseEvent) => {
@@ -337,7 +327,7 @@ serialization step. Saving is \`doc.toString()\` plus line-ending restoration.
                 <div
                   key={doc.id}
                   onClick={() => setActiveDoc(doc.id)}
-                  onDoubleClick={(e) => handleStartRename(doc.id, doc.fileName, e)}
+                  onDoubleClick={(e) => handleStartRename(doc.id, doc.meta.fileName, e)}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -402,7 +392,7 @@ serialization step. Saving is \`doc.toString()\` plus line-ending restoration.
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      {doc.fileName}
+                      {doc.meta.fileName}
                     </span>
                   )}
 
@@ -432,7 +422,7 @@ serialization step. Saving is \`doc.toString()\` plus line-ending restoration.
                     <button
                       type="button"
                       title="Rename Note"
-                      onClick={(e) => handleStartRename(doc.id, doc.fileName, e)}
+                      onClick={(e) => handleStartRename(doc.id, doc.meta.fileName, e)}
                       style={{
                         background: 'none',
                         border: 'none',
@@ -447,7 +437,7 @@ serialization step. Saving is \`doc.toString()\` plus line-ending restoration.
                       <Pencil size={11} />
                     </button>
 
-                    {docHeaders.length > 1 && (
+                    {documents.length > 1 && (
                       <button
                         type="button"
                         title="Close Note"
