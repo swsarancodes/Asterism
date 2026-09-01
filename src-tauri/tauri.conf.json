@@ -37,7 +37,8 @@
     "shortDescription": "Distraction-Free Markdown Studio",
     "longDescription": "Manicule is an open-source, distraction-free Markdown studio that edits Markdown visually while treating your .md file as the single source of truth.",
     "macOS": {
-      "minimumSystemVersion": "10.15"
+      "minimumSystemVersion": "10.15",
+      "signingIdentity": "-"
     }
   }
 }
