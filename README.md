@@ -4,9 +4,34 @@
 
 Manicule edits Markdown **visually** — with no preview pane, no compile step, and no AST serialization — while treating your `.md` file as the single source of truth. Bytes you don't touch are bytes we don't rewrite.
 
+[![GitHub Release](https://img.shields.io/github/v/release/swsarancodes/Maincule?color=orange&label=Release)](https://github.com/swsarancodes/Maincule/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 ```
 plain .md on disk  ·  no account  ·  zero telemetry  ·  works offline  ·  MIT licensed
 ```
+
+---
+
+## ⚡ Download
+
+Get the latest stable desktop release directly from [**GitHub Releases**](https://github.com/swsarancodes/Maincule/releases/latest):
+
+| Platform | Format | Architecture | Direct Download |
+|---|---|---|---|
+| **macOS** | `.dmg` | Apple Silicon (M1/M2/M3/M4) | [**Download DMG (ARM64)**](https://github.com/swsarancodes/Maincule/releases/latest) |
+| **macOS** | `.dmg` | Intel (x86_64) | [**Download DMG (x64)**](https://github.com/swsarancodes/Maincule/releases/latest) |
+| **Windows** | `.exe` / `.msi` | 64-bit | [**Download Setup (.exe)**](https://github.com/swsarancodes/Maincule/releases/latest) |
+| **Linux** | `.AppImage` / `.deb` | 64-bit | [**Download AppImage**](https://github.com/swsarancodes/Maincule/releases/latest) |
+
+> [!TIP]
+> **macOS First-Launch Note (Gatekeeper)**  
+> Because Manicule is a community open-source project without a paid Apple Developer certificate, macOS Gatekeeper may show a warning on first launch.  
+> - **Option 1**: Right-click (or Control-click) `Manicule.app` in `/Applications` and select **Open**, then click **Open**.  
+> - **Option 2**: Run in Terminal:
+>   ```bash
+>   xattr -d com.apple.quarantine /Applications/Manicule.app
+>   ```
 
 ---
 
