@@ -9,9 +9,10 @@ export const StatusBar: React.FC = () => {
   const wordCount = useWorkspaceStore((s) => s.wordCount);
   const charCount = useWorkspaceStore((s) => s.charCount);
   const readingTime = useWorkspaceStore((s) => s.readingTimeMin);
-  const activeDoc = useWorkspaceStore((s) =>
-    s.documents.find((d) => d.id === s.activeDocumentId)
-  );
+  const lineEnding = useWorkspaceStore((s) => {
+    const doc = s.documents.find((d) => d.id === s.activeDocumentId);
+    return doc?.meta.lineEnding || 'lf';
+  });
 
   const theme = useSettingsStore((s) => s.theme);
   const setTheme = useSettingsStore((s) => s.setTheme);
@@ -54,7 +55,7 @@ export const StatusBar: React.FC = () => {
         </span>
         <span>•</span>
         <span>
-          {activeDoc?.meta.lineEnding === 'crlf' ? 'CRLF' : 'LF'} • UTF-8
+          {lineEnding === 'crlf' ? 'CRLF' : 'LF'} • UTF-8
         </span>
 
         <button

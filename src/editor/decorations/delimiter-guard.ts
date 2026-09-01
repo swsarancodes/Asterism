@@ -12,17 +12,17 @@ interface DelimiterSpan {
 }
 
 /**
- * Finds all active inline delimiter spans in the document
+ * Finds active inline delimiter spans within a text range
  */
-export function findInlineSpans(docText: string): DelimiterSpan[] {
+export function findInlineSpans(text: string, offset = 0): DelimiterSpan[] {
   const spans: DelimiterSpan[] = [];
   const regex = /(\*\*|~~|`|\*)([^\n]+?)(\1)/g;
   let m: RegExpExecArray | null;
 
-  while ((m = regex.exec(docText)) !== null) {
+  while ((m = regex.exec(text)) !== null) {
     const d = m[1];
     const dLen = d.length;
-    const start = m.index;
+    const start = offset + m.index;
     const end = start + m[0].length;
     spans.push({
       openFrom: start,
@@ -39,13 +39,19 @@ export function findInlineSpans(docText: string): DelimiterSpan[] {
 }
 
 /**
- * Smart backspace handler that protects concealed delimiters from accidental deletion
+ * Smart backspace handler that protects concealed delimiters from accidental deletion.
+ * Scoped to the active line around the cursor for instantaneous response.
  */
 export function smartBackspace(view: EditorView): boolean {
   const { state } = view;
-  const doc = state.doc.toString();
   const sel = state.selection.main;
-  const spans = findInlineSpans(doc);
+
+  const startLine = state.doc.lineAt(sel.from);
+  const endLine = sel.empty ? startLine : state.doc.lineAt(sel.to);
+  const checkFrom = startLine.from;
+  const checkTo = endLine.to;
+  const lineText = state.doc.sliceString(checkFrom, checkTo);
+  const spans = findInlineSpans(lineText, checkFrom);
 
   // 1. Non-empty selection deletion
   if (!sel.empty) {
@@ -127,16 +133,17 @@ export function smartBackspace(view: EditorView): boolean {
 }
 
 /**
- * Smart delete (forward delete) handler that protects concealed delimiters
+ * Smart delete (forward delete) handler that protects concealed delimiters.
+ * Scoped to the active line around the cursor for instantaneous response.
  */
 export function smartDelete(view: EditorView): boolean {
   const { state } = view;
-  const doc = state.doc.toString();
   const sel = state.selection.main;
   if (!sel.empty) return false;
 
   const pos = sel.head;
-  const spans = findInlineSpans(doc);
+  const line = state.doc.lineAt(pos);
+  const spans = findInlineSpans(line.text, line.from);
 
   for (const span of spans) {
     // If deleting the very last character with forward delete
@@ -166,63 +173,81 @@ export function smartDelete(view: EditorView): boolean {
 /**
  * Transaction filter that automatically normalizes whitespace inside delimiters
  * (e.g. "**hi **" -> "**hi** ") so deleting words NEVER invalidates CommonMark bold formatting.
+ * Optimally scoped ONLY to the lines modified by the transaction.
  */
 export const delimiterNormalizer = EditorState.transactionFilter.of((tr) => {
   if (!tr.docChanged) return tr;
 
-  const newDoc = tr.newDoc.toString();
   const changes: ChangeSpec[] = [];
 
-  // 1. Normalize Bold: ** text ** ->  **text** 
-  const boldRegex = /\*\*(\s*)([^\*\n]+?)(\s*)\*\*/g;
-  let bm: RegExpExecArray | null;
-  while ((bm = boldRegex.exec(newDoc)) !== null) {
-    const full = bm[0];
-    const leading = bm[1];
-    const core = bm[2];
-    const trailing = bm[3];
-    if (leading.length > 0 || trailing.length > 0) {
-      changes.push({
-        from: bm.index,
-        to: bm.index + full.length,
-        insert: `${leading}**${core}**${trailing}`,
-      });
-    }
-  }
+  // Inspect only the lines affected by the change
+  const inspectedLines = new Set<number>();
 
-  // 2. Normalize Italic: * text * ->  *text* 
-  const emRegex = /(?<!\*)\*(\s*)([^\*\n]+?)(\s*)\*(?!\*)/g;
-  let em: RegExpExecArray | null;
-  while ((em = emRegex.exec(newDoc)) !== null) {
-    const full = em[0];
-    const leading = em[1];
-    const core = em[2];
-    const trailing = em[3];
-    if (leading.length > 0 || trailing.length > 0) {
-      changes.push({
-        from: em.index,
-        to: em.index + full.length,
-        insert: `${leading}*${core}*${trailing}`,
-      });
-    }
-  }
+  tr.changes.iterChangedRanges((_fromA, _toA, fromB, toB) => {
+    const doc = tr.newDoc;
+    const startLine = doc.lineAt(Math.min(fromB, doc.length));
+    const endLine = doc.lineAt(Math.min(toB, doc.length));
 
-  // 3. Normalize Strikethrough: ~~ text ~~ ->  ~~text~~ 
-  const strikeRegex = /~~(\s*)([^~\n]+?)(\s*)~~/g;
-  let sm: RegExpExecArray | null;
-  while ((sm = strikeRegex.exec(newDoc)) !== null) {
-    const full = sm[0];
-    const leading = sm[1];
-    const core = sm[2];
-    const trailing = sm[3];
-    if (leading.length > 0 || trailing.length > 0) {
-      changes.push({
-        from: sm.index,
-        to: sm.index + full.length,
-        insert: `${leading}~~${core}~~${trailing}`,
-      });
+    for (let l = startLine.number; l <= endLine.number; l++) {
+      if (inspectedLines.has(l)) continue;
+      inspectedLines.add(l);
+
+      const line = doc.line(l);
+      const lineText = line.text;
+      const lineFrom = line.from;
+
+      // 1. Normalize Bold: ** text ** ->  **text**
+      const boldRegex = /\*\*(\s*)([^\*\n]+?)(\s*)\*\*/g;
+      let bm: RegExpExecArray | null;
+      while ((bm = boldRegex.exec(lineText)) !== null) {
+        const full = bm[0];
+        const leading = bm[1];
+        const core = bm[2];
+        const trailing = bm[3];
+        if (leading.length > 0 || trailing.length > 0) {
+          changes.push({
+            from: lineFrom + bm.index,
+            to: lineFrom + bm.index + full.length,
+            insert: `${leading}**${core}**${trailing}`,
+          });
+        }
+      }
+
+      // 2. Normalize Italic: * text * ->  *text*
+      const emRegex = /(?<!\*)\*(\s*)([^\*\n]+?)(\s*)\*(?!\*)/g;
+      let em: RegExpExecArray | null;
+      while ((em = emRegex.exec(lineText)) !== null) {
+        const full = em[0];
+        const leading = em[1];
+        const core = em[2];
+        const trailing = em[3];
+        if (leading.length > 0 || trailing.length > 0) {
+          changes.push({
+            from: lineFrom + em.index,
+            to: lineFrom + em.index + full.length,
+            insert: `${leading}*${core}*${trailing}`,
+          });
+        }
+      }
+
+      // 3. Normalize Strikethrough: ~~ text ~~ ->  ~~text~~
+      const strikeRegex = /~~(\s*)([^~\n]+?)(\s*)~~/g;
+      let sm: RegExpExecArray | null;
+      while ((sm = strikeRegex.exec(lineText)) !== null) {
+        const full = sm[0];
+        const leading = sm[1];
+        const core = sm[2];
+        const trailing = sm[3];
+        if (leading.length > 0 || trailing.length > 0) {
+          changes.push({
+            from: lineFrom + sm.index,
+            to: lineFrom + sm.index + full.length,
+            insert: `${leading}~~${core}~~${trailing}`,
+          });
+        }
+      }
     }
-  }
+  });
 
   if (changes.length === 0) return tr;
 

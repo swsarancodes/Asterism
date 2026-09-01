@@ -122,18 +122,20 @@ export function buildConcealDecorations(view: EditorView): DecorationSet {
     }
   }
 
-  // Filter valid ranges & deduplicate
-  const uniqueRanges: Array<{ from: number; to: number }> = [];
-  for (const r of rawRanges) {
-    if (r.from < r.to && !uniqueRanges.some((u) => u.from === r.from && u.to === r.to)) {
-      uniqueRanges.push(r);
+  // Filter valid ranges, sort, and deduplicate in a single O(N) pass
+  const validRanges = rawRanges
+    .filter((r) => r.from < r.to)
+    .sort((a, b) => a.from - b.from || a.to - b.to);
+
+  let lastFrom = -1;
+  let lastTo = -1;
+
+  for (const r of validRanges) {
+    if (r.from !== lastFrom || r.to !== lastTo) {
+      builder.add(r.from, r.to, concealedMarkDeco);
+      lastFrom = r.from;
+      lastTo = r.to;
     }
-  }
-
-  uniqueRanges.sort((a, b) => a.from - b.from || a.to - b.to);
-
-  for (const r of uniqueRanges) {
-    builder.add(r.from, r.to, concealedMarkDeco);
   }
 
   return builder.finish();

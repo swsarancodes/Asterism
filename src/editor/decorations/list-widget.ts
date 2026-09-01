@@ -10,6 +10,10 @@ class BulletWidget extends WidgetType {
     return span;
   }
 
+  eq(_other: BulletWidget): boolean {
+    return true;
+  }
+
   ignoreEvent(): boolean {
     return false;
   }

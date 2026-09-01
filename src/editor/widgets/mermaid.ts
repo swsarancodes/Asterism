@@ -1,13 +1,25 @@
 import { EditorView } from '@codemirror/view';
 import { MarkdownWidget } from './base';
-import mermaid from 'mermaid';
 
-let mermaidInitialized = false;
+let mermaidPromise: Promise<any> | null = null;
+let mermaidInstance: any = null;
+const svgCache = new Map<string, string>();
 
-function initMermaidTheme() {
-  if (mermaidInitialized) return;
+async function getMermaid() {
+  if (mermaidInstance) return mermaidInstance;
+  if (!mermaidPromise) {
+    mermaidPromise = import('mermaid').then((m) => {
+      mermaidInstance = m.default;
+      initMermaidTheme(mermaidInstance);
+      return mermaidInstance;
+    });
+  }
+  return mermaidPromise;
+}
+
+function initMermaidTheme(m: any) {
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-  mermaid.initialize({
+  m.initialize({
     startOnLoad: false,
     theme: isDark ? 'dark' : 'neutral',
     securityLevel: 'loose',
@@ -30,7 +42,6 @@ function initMermaidTheme() {
           tertiaryColor: '#f3f1ec',
         },
   });
-  mermaidInitialized = true;
 }
 
 const DIAGRAM_TEMPLATES: Record<string, string> = {
@@ -100,8 +111,6 @@ const DIAGRAM_TEMPLATES: Record<string, string> = {
 
 export class MermaidWidget extends MarkdownWidget {
   toDOM(view: EditorView): HTMLElement {
-    initMermaidTheme();
-
     const container = document.createElement('div');
     container.className = 'as-diagram-container';
 
@@ -284,27 +293,40 @@ export class MermaidWidget extends MarkdownWidget {
 
     container.appendChild(contentWrapper);
 
-    // Function to render diagram SVG
-    const renderDiagram = (code: string) => {
-      const renderId = `mermaid-${Math.random().toString(36).substring(2, 9)}`;
-      mermaid
-        .render(renderId, code)
-        .then(({ svg }) => {
-          body.innerHTML = svg;
-          const svgEl = body.querySelector('svg');
-          if (svgEl) {
-            svgEl.style.maxWidth = '100%';
-            svgEl.style.height = 'auto';
-          }
-        })
-        .catch((err) => {
-          body.innerHTML = `
-            <div class="as-diagram-error">
-              <span class="as-diagram-error-title">Mermaid Syntax Note</span>
-              <span class="as-diagram-error-desc">${err?.message || 'Incomplete or invalid diagram syntax'}</span>
-            </div>
-          `;
-        });
+    // Function to render diagram SVG with caching and lazy loading
+    const renderDiagram = async (code: string) => {
+      const themeKey = document.documentElement.getAttribute('data-theme') || 'light';
+      const cacheKey = `${themeKey}:${code.trim()}`;
+      const cached = svgCache.get(cacheKey);
+      if (cached) {
+        body.innerHTML = cached;
+        const svgEl = body.querySelector('svg');
+        if (svgEl) {
+          svgEl.style.maxWidth = '100%';
+          svgEl.style.height = 'auto';
+        }
+        return;
+      }
+
+      try {
+        const m = await getMermaid();
+        const renderId = `mermaid-${Math.random().toString(36).substring(2, 9)}`;
+        const { svg } = await m.render(renderId, code);
+        svgCache.set(cacheKey, svg);
+        body.innerHTML = svg;
+        const svgEl = body.querySelector('svg');
+        if (svgEl) {
+          svgEl.style.maxWidth = '100%';
+          svgEl.style.height = 'auto';
+        }
+      } catch (err: any) {
+        body.innerHTML = `
+          <div class="as-diagram-error">
+            <span class="as-diagram-error-title">Mermaid Syntax Note</span>
+            <span class="as-diagram-error-desc">${err?.message || 'Incomplete or invalid diagram syntax'}</span>
+          </div>
+        `;
+      }
     };
 
     // Update Mode UI

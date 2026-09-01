@@ -170,6 +170,27 @@ export class TableWidget extends MarkdownWidget {
     const tableEl = document.createElement('table');
     tableEl.className = 'as-table';
 
+    // Cell keyboard navigation helper
+    const navigateCells = (currentEl: HTMLElement, shift: boolean, onLastTab?: () => void) => {
+      const allCells = Array.from(
+        tableEl.querySelectorAll<HTMLElement>('th[contenteditable="true"], td[contenteditable="true"]')
+      );
+      const idx = allCells.indexOf(currentEl);
+      if (idx === -1) return;
+
+      if (shift) {
+        if (idx > 0) {
+          allCells[idx - 1].focus();
+        }
+      } else {
+        if (idx < allCells.length - 1) {
+          allCells[idx + 1].focus();
+        } else if (onLastTab) {
+          onLastTab();
+        }
+      }
+    };
+
     // Thead
     const thead = document.createElement('thead');
     const headerTr = document.createElement('tr');
@@ -194,6 +215,11 @@ export class TableWidget extends MarkdownWidget {
         if (e.key === 'Enter') {
           e.preventDefault();
           th.blur();
+        } else if (e.key === 'Tab') {
+          e.preventDefault();
+          e.stopPropagation();
+          th.blur();
+          navigateCells(th, e.shiftKey);
         }
       };
 
@@ -230,6 +256,20 @@ export class TableWidget extends MarkdownWidget {
           if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             td.blur();
+          } else if (e.key === 'Tab') {
+            e.preventDefault();
+            e.stopPropagation();
+            td.blur();
+            const isLastCell = rowIdx === parsed.rows.length - 1 && colIdx === row.length - 1;
+            if (!e.shiftKey && isLastCell) {
+              const updated: ParsedTable = {
+                ...parsed,
+                rows: [...parsed.rows, new Array(parsed.headers.length).fill('')],
+              };
+              this.replace(view, serializeMarkdownTable(updated));
+            } else {
+              navigateCells(td, e.shiftKey);
+            }
           }
         };
 

@@ -61,43 +61,41 @@ export function buildInlineStyleDecorations(view: EditorView): DecorationSet {
     const boldRegex = /\*\*([^\*\n]+?)\*\*/g;
     let bm;
     while ((bm = boldRegex.exec(text)) !== null) {
-      const start = from + bm.index;
-      const end = start + bm[0].length;
-      if (!marks.some((m) => m.from === start && m.to === end)) {
-        marks.push({ from: start, to: end, deco: strongDeco });
-      }
+      marks.push({ from: from + bm.index, to: from + bm.index + bm[0].length, deco: strongDeco });
     }
 
     // Strikethrough pattern: ~~text~~
     const strikeRegex = /~~([^~\n]+?)~~/g;
     let sm;
     while ((sm = strikeRegex.exec(text)) !== null) {
-      const start = from + sm.index;
-      const end = start + sm[0].length;
-      if (!marks.some((m) => m.from === start && m.to === end)) {
-        marks.push({ from: start, to: end, deco: strikeDeco });
-      }
+      marks.push({ from: from + sm.index, to: from + sm.index + sm[0].length, deco: strikeDeco });
     }
 
     // Inline code pattern: `code`
     const codeRegex = /`([^`\n]+?)`/g;
     let cm;
     while ((cm = codeRegex.exec(text)) !== null) {
-      const start = from + cm.index;
-      const end = start + cm[0].length;
-      if (!marks.some((m) => m.from === start && m.to === end)) {
-        marks.push({ from: start, to: end, deco: codeInlineDeco });
-      }
+      marks.push({ from: from + cm.index, to: from + cm.index + cm[0].length, deco: codeInlineDeco });
     }
   }
 
-  // Sort strictly by `from` ascending, then `to` ascending
+  // Sort strictly by `from` ascending, then `to` ascending, and deduplicate
   const sorted = marks
     .filter((m) => m.from < m.to)
     .sort((a, b) => a.from - b.from || a.to - b.to);
 
+  let lastFrom = -1;
+  let lastTo = -1;
+  let lastClass = '';
+
   for (const mark of sorted) {
-    builder.add(mark.from, mark.to, mark.deco);
+    const markClass = (mark.deco as any).spec?.class || '';
+    if (mark.from !== lastFrom || mark.to !== lastTo || markClass !== lastClass) {
+      builder.add(mark.from, mark.to, mark.deco);
+      lastFrom = mark.from;
+      lastTo = mark.to;
+      lastClass = markClass;
+    }
   }
 
   return builder.finish();

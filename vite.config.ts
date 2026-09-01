@@ -29,4 +29,22 @@ export default defineConfig(async () => ({
       ignored: ["**/src-tauri/**"],
     },
   },
+  build: {
+    target: "esnext",
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "vendor-codemirror": [
+            "@codemirror/state",
+            "@codemirror/view",
+            "@codemirror/commands",
+            "@codemirror/language",
+            "@codemirror/lang-markdown",
+          ],
+          "vendor-react": ["react", "react-dom", "zustand"],
+          "vendor-icons": ["lucide-react"],
+        },
+      },
+    },
+  },
 }));

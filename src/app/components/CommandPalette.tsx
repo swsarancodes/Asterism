@@ -24,7 +24,6 @@ export const CommandPalette: React.FC = () => {
   const toggleSidebar = useSettingsStore((s) => s.toggleSidebar);
 
   const createEmpty = useWorkspaceStore((s) => s.createEmptyDocument);
-  const documents = useWorkspaceStore((s) => s.documents);
   const setActiveDoc = useWorkspaceStore((s) => s.setActiveDocument);
 
   // Global shortcut listener
@@ -113,13 +112,15 @@ export const CommandPalette: React.FC = () => {
       icon: theme === 'light' ? Moon : Sun,
       run: () => setTheme(theme === 'light' ? 'dark' : 'light'),
     },
-    ...documents.map((doc) => ({
-      id: `open-doc-${doc.id}`,
-      title: `Jump to note: ${doc.meta.fileName}`,
-      category: 'Opened Notes',
-      icon: FileText,
-      run: () => setActiveDoc(doc.id),
-    })),
+    ...(open
+      ? useWorkspaceStore.getState().documents.map((doc) => ({
+          id: `open-doc-${doc.id}`,
+          title: `Jump to note: ${doc.meta.fileName}`,
+          category: 'Opened Notes',
+          icon: FileText,
+          run: () => setActiveDoc(doc.id),
+        }))
+      : []),
   ];
 
   const filtered = commands.filter((c) =>

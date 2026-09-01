@@ -92,7 +92,8 @@ export interface WorkspaceState {
   updateDocumentContent: (id: string, newContent: string) => void;
   renameDocument: (id: string, newName: string) => void;
   markDocumentSaved: (id: string, newPath?: string) => void;
-  updateCursorStats: (line: number, col: number, docText: string) => void;
+  updateCursorPosition: (line: number, col: number) => void;
+  updateCursorStats: (line: number, col: number, docText?: string) => void;
 }
 
 const initialDoc = createDocumentState(WELCOME_DOC, 'Welcome.md');
@@ -174,6 +175,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   },
 
   updateDocumentContent: (id: string, newContent: string) => {
+    const words = computeWordCount(newContent);
     set((state) => ({
       documents: state.documents.map((doc) => {
         if (doc.id === id) {
@@ -182,9 +184,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         }
         return doc;
       }),
-      wordCount: computeWordCount(newContent),
+      wordCount: words,
       charCount: newContent.length,
-      readingTimeMin: computeReadingTime(computeWordCount(newContent)),
+      readingTimeMin: computeReadingTime(words),
     }));
   },
 
@@ -208,24 +210,37 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     }));
   },
 
-  updateCursorStats: (line: number, col: number, docText: string) => {
-    const words = computeWordCount(docText);
-    set({
-      cursorLine: line,
-      cursorCol: col,
-      wordCount: words,
-      charCount: docText.length,
-      readingTimeMin: computeReadingTime(words),
+  updateCursorPosition: (line: number, col: number) => {
+    set((state) => {
+      if (state.cursorLine === line && state.cursorCol === col) return state;
+      return { cursorLine: line, cursorCol: col };
+    });
+  },
+
+  updateCursorStats: (line: number, col: number) => {
+    set((state) => {
+      if (state.cursorLine === line && state.cursorCol === col) return state;
+      return { cursorLine: line, cursorCol: col };
     });
   },
 }));
 
-function computeWordCount(text: string): number {
-  if (!text.trim()) return 0;
-  const matches = text.trim().match(/\S+/g);
-  return matches ? matches.length : 0;
+export function computeWordCount(text: string): number {
+  let count = 0;
+  let inWord = false;
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    // Any whitespace (space, tab, newline, carriage return)
+    if (code <= 32) {
+      inWord = false;
+    } else if (!inWord) {
+      inWord = true;
+      count++;
+    }
+  }
+  return count;
 }
 
-function computeReadingTime(words: number): number {
+export function computeReadingTime(words: number): number {
   return Math.max(1, Math.ceil(words / 200));
 }

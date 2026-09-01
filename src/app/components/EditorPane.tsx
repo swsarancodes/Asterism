@@ -18,9 +18,6 @@ export const EditorPane: React.FC<EditorPaneProps> = ({ modeOverride }) => {
   const viewRef = useRef<EditorView | null>(null);
 
   const activeDocId = useWorkspaceStore((s) => s.activeDocumentId);
-  const activeDoc = useWorkspaceStore((s) =>
-    s.documents.find((d) => d.id === s.activeDocumentId)
-  );
   const updateContent = useWorkspaceStore((s) => s.updateDocumentContent);
   const updateCursorStats = useWorkspaceStore((s) => s.updateCursorStats);
 
@@ -84,9 +81,10 @@ export const EditorPane: React.FC<EditorPaneProps> = ({ modeOverride }) => {
     if (!containerRef.current) return;
 
     // Retain previous document text if available
+    const currentDoc = useWorkspaceStore.getState().documents.find((d) => d.id === activeDocId);
     const initialText = viewRef.current
       ? viewRef.current.state.doc.toString()
-      : (activeDoc ? activeDoc.currentText : '');
+      : (currentDoc ? currentDoc.currentText : '');
 
     const prevSelection = viewRef.current ? viewRef.current.state.selection : undefined;
 
@@ -108,7 +106,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({ modeOverride }) => {
         const view = viewRef.current;
         if (!view) return;
 
-        updateCursorStats(line, col, view.state.doc.toString());
+        updateCursorStats(line, col);
 
         const sel = view.state.selection.main;
 

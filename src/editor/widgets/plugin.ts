@@ -113,7 +113,7 @@ export const blockWidgetField = StateField.define<DecorationSet>({
     return buildBlockWidgets(state);
   },
   update(decorations, tr) {
-    if (tr.docChanged || tr.selection) {
+    if (tr.docChanged) {
       return buildBlockWidgets(tr.state);
     }
     return decorations;
