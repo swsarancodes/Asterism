@@ -130,20 +130,6 @@ bun test
 
 ---
 
-## Documentation
-
-For comprehensive technical specifications, explore the [`docs/`](docs/) directory:
-
-- [**01 — Vision & Scope**](docs/01-vision-and-scope.md): Product scope, non-goals, and v1 success criteria.
-- [**02 — Architecture**](docs/02-architecture.md): Process model, IPC boundaries, and performance budgets.
-- [**03 — Editor Core Spec**](docs/03-editor-core-spec.md): The hybrid concealment algorithm, reveal rules, and fidelity invariants.
-- [**04 — Feature Spec**](docs/04-feature-spec.md): Complete feature breakdown and acceptance criteria.
-- [**05 — Roadmap**](docs/05-roadmap.md): Milestone progression from M0 (Skeleton) to M6 (Release).
-- [**06 — Repo Structure**](docs/06-repo-structure.md): File placement rules and architectural boundaries.
-- [**07 — Decision Log**](docs/07-decision-log.md): Architectural Decision Records (ADRs).
-
----
-
 ## Contributing
 
 Contributions are welcome! Please ensure that:
