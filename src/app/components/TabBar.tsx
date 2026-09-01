@@ -3,6 +3,7 @@ import { useWorkspaceStore } from '../stores/workspace';
 import { useSettingsStore } from '../stores/settings';
 import { ViewMode } from '../../editor/modes/view-mode';
 import { FileText, Plus, X, Eye, Code, Columns, PanelLeft } from 'lucide-react';
+import { formatDisplayName } from '../../core/document/file-meta';
 
 export const TabBar: React.FC = () => {
   const documents = useWorkspaceStore((s) => s.documents);
@@ -19,11 +20,19 @@ export const TabBar: React.FC = () => {
 
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [editingName, setEditingName] = React.useState('');
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    if (editingId && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editingId]);
 
   const handleStartRename = (docId: string, currentName: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setEditingId(docId);
-    setEditingName(currentName);
+    setEditingName(formatDisplayName(currentName));
   };
 
   const handleFinishRename = (docId: string) => {
@@ -116,6 +125,7 @@ export const TabBar: React.FC = () => {
 
               {isEditing ? (
                 <input
+                  ref={inputRef}
                   autoFocus
                   type="text"
                   value={editingName}
@@ -131,31 +141,27 @@ export const TabBar: React.FC = () => {
                     }
                   }}
                   style={{
-                    fontSize: '12px',
-                    padding: '1px 4px',
+                    fontSize: '13px',
+                    fontWeight: isActive ? 600 : 400,
+                    fontFamily: 'inherit',
                     color: 'var(--as-text)',
-                    backgroundColor: 'var(--as-bg-surface)',
-                    border: '1px solid var(--as-accent)',
-                    borderRadius: '3px',
+                    backgroundColor: 'transparent',
+                    border: 'none',
+                    borderBottom: '1.5px solid var(--as-accent)',
+                    borderRadius: '0',
                     outline: 'none',
-                    width: `${Math.max(60, editingName.length * 8)}px`,
+                    padding: '0 1px',
+                    margin: 0,
+                    width: `${Math.max(40, (editingName.length + 1) * 7.5)}px`,
+                    minWidth: '40px',
                   }}
                 />
               ) : (
-                <span title="Double-click to rename">{doc.meta.fileName}</span>
+                <span title={`${doc.meta.fileName} (Double-click to rename)`}>
+                  {formatDisplayName(doc.meta.fileName)}
+                </span>
               )}
 
-              {doc.isDirty && (
-                <span
-                  style={{
-                    display: 'inline-block',
-                    width: '6px',
-                    height: '6px',
-                    borderRadius: '50%',
-                    backgroundColor: 'var(--as-accent)',
-                  }}
-                />
-              )}
               {documents.length > 1 && (
                 <button
                   type="button"

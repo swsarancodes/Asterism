@@ -397,6 +397,52 @@
   background-color: var(--as-table-hover);
 }
 
+.as-table th:focus,
+.as-table td:focus {
+  background-color: var(--as-table-hover);
+  box-shadow: inset 0 0 0 2px var(--as-accent);
+  border-radius: 2px;
+}
+
+.as-table-content-wrapper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.as-table-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-top: 1px solid var(--as-border);
+}
+
+.as-table-editor-wrapper {
+  padding: 12px;
+  background-color: var(--as-code-bg);
+  border-right: 1px solid var(--as-border);
+  display: flex;
+}
+
+.as-table-textarea {
+  width: 100%;
+  min-height: 160px;
+  height: 100%;
+  font-family: var(--as-font-mono) !important;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--as-text);
+  background-color: transparent;
+  border: none;
+  outline: none;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.as-table-visual-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
 /* Notion-style Mermaid Diagrams */
 .as-diagram-container {
   margin: 1.4em 0;
@@ -558,6 +604,21 @@
   color: var(--as-text);
 }
 
+.as-codeblock-textarea {
+  width: 100%;
+  min-height: 120px;
+  padding: 14px 16px;
+  font-family: var(--as-font-mono) !important;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--as-text);
+  background-color: transparent;
+  border: none;
+  outline: none;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
 /* Notion-style Callout Cards */
 .as-callout {
   display: flex;
@@ -649,3 +710,43 @@
   background: var(--as-border);
   margin: 2em 0;
 }
+
+/* Notion Tree Node Hover Actions */
+.as-tree-node:hover .as-tree-actions {
+  opacity: 1 !important;
+}
+
+/* Notion Breadcrumbs Trail */
+.as-breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  font-size: 12px;
+  color: var(--as-text-muted);
+  border-bottom: 1px solid var(--as-border-subtle, rgba(128,128,128,0.1));
+  background-color: var(--as-bg-surface);
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.as-breadcrumb-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  border-radius: var(--as-radius-sm);
+  padding: 1px 4px;
+  transition: all var(--as-transition-fast);
+}
+
+.as-breadcrumb-item:hover {
+  background-color: var(--as-bg-hover);
+  color: var(--as-text);
+}
+
+.as-breadcrumb-separator {
+  color: var(--as-text-dim);
+  font-size: 10px;
+}
+

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useWorkspaceStore } from '../stores/workspace';
 import { useSettingsStore } from '../stores/settings';
 import { Search, Eye, Code, Columns, Moon, Sun, Plus, FileText, PanelLeft } from 'lucide-react';
+import { formatDisplayName } from '../../core/document/file-meta';
 
 interface CommandItem {
   id: string;
@@ -115,7 +116,7 @@ export const CommandPalette: React.FC = () => {
     ...(open
       ? useWorkspaceStore.getState().documents.map((doc) => ({
           id: `open-doc-${doc.id}`,
-          title: `Jump to note: ${doc.meta.fileName}`,
+          title: `Jump to note: ${formatDisplayName(doc.meta.fileName)}`,
           category: 'Opened Notes',
           icon: FileText,
           run: () => setActiveDoc(doc.id),

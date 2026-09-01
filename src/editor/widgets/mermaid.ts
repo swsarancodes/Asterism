@@ -109,19 +109,37 @@ const DIAGRAM_TEMPLATES: Record<string, string> = {
     commit`,
 };
 
+function extractCleanMermaidCode(src: string): string {
+  return src
+    .replace(/^```mermaid\s*\n?/, '')
+    .replace(/\n?```\s*$/, '')
+    .trim();
+}
+
+interface MermaidWidgetState {
+  widget: MermaidWidget;
+  mode: 'preview' | 'split' | 'code';
+  onDocUpdate: (newSource: string) => void;
+}
+
 export class MermaidWidget extends MarkdownWidget {
+  updateDOM(dom: HTMLElement, _view: EditorView): boolean {
+    const state = (dom as any).__mermaidState as MermaidWidgetState | undefined;
+    if (state) {
+      state.widget = this;
+      state.onDocUpdate(this.source);
+      return true;
+    }
+    return false;
+  }
+
   toDOM(view: EditorView): HTMLElement {
     const container = document.createElement('div');
     container.className = 'as-diagram-container';
 
-    // State for display mode: 'preview' | 'split' | 'code'
+    // Mode state: 'preview' | 'split' | 'code'
     let currentMode: 'preview' | 'split' | 'code' = 'preview';
-
-    // Extract clean Mermaid diagram code
-    const cleanCode = this.source
-      .replace(/^```mermaid\s*\n?/, '')
-      .replace(/\n?```\s*$/, '')
-      .trim();
+    let cleanCode = extractCleanMermaidCode(this.source);
 
     // 1. Toolbar Header
     const toolbar = document.createElement('div');
@@ -161,11 +179,15 @@ export class MermaidWidget extends MarkdownWidget {
       if (chosen && DIAGRAM_TEMPLATES[chosen]) {
         const templateCode = DIAGRAM_TEMPLATES[chosen];
         textarea.value = templateCode;
+        cleanCode = templateCode;
         renderDiagram(templateCode);
         const newBlockText = `\`\`\`mermaid\n${templateCode}\n\`\`\``;
-        view.dispatch({
-          changes: { from: this.from, to: this.to, insert: newBlockText },
-        });
+        this.replace(view, newBlockText, container);
+        if (currentMode === 'preview') {
+          currentMode = 'split';
+          stateObj.mode = 'split';
+          updateModeUI();
+        }
       }
       select.value = '';
     };
@@ -240,8 +262,9 @@ export class MermaidWidget extends MarkdownWidget {
     deleteBtn.textContent = 'Delete';
     deleteBtn.onclick = (e) => {
       e.stopPropagation();
+      const range = this.resolveRange(view, container);
       view.dispatch({
-        changes: { from: this.from, to: this.to, insert: '' },
+        changes: { from: range.from, to: range.to, insert: '' },
       });
       view.focus();
     };
@@ -250,7 +273,7 @@ export class MermaidWidget extends MarkdownWidget {
     toolbar.appendChild(right);
     container.appendChild(toolbar);
 
-    // 2. Main Content Wrapper (Supports Split or Single)
+    // 2. Main Content Wrapper (Supports Split, Code, or Preview)
     const contentWrapper = document.createElement('div');
     contentWrapper.className = 'as-diagram-content-wrapper';
 
@@ -263,24 +286,45 @@ export class MermaidWidget extends MarkdownWidget {
     textarea.className = 'as-diagram-textarea';
     textarea.value = cleanCode;
     textarea.spellcheck = false;
+    textarea.placeholder = 'Type Mermaid diagram syntax here...';
 
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    let renderTimer: ReturnType<typeof setTimeout> | null = null;
 
     textarea.addEventListener('input', (e) => {
       e.stopPropagation();
       const newDiagramCode = textarea.value;
 
-      // Realtime SVG re-render
-      renderDiagram(newDiagramCode);
+      // Realtime SVG re-render (debounced 100ms for smooth typing)
+      if (renderTimer) clearTimeout(renderTimer);
+      renderTimer = setTimeout(() => {
+        renderDiagram(newDiagramCode);
+      }, 100);
 
-      // Debounced writeback to document text buffer
+      // Debounced writeback to document text buffer (350ms)
       if (debounceTimer) clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
+        cleanCode = newDiagramCode;
         const newBlockText = `\`\`\`mermaid\n${newDiagramCode}\n\`\`\``;
-        view.dispatch({
-          changes: { from: this.from, to: this.to, insert: newBlockText },
-        });
-      }, 400);
+        this.replace(view, newBlockText, container);
+      }, 350);
+    });
+
+    textarea.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        textarea.value = textarea.value.substring(0, start) + '  ' + textarea.value.substring(end);
+        textarea.selectionStart = textarea.selectionEnd = start + 2;
+        textarea.dispatchEvent(new Event('input'));
+      } else if (e.key === 'Escape') {
+        currentMode = 'preview';
+        stateObj.mode = 'preview';
+        updateModeUI();
+        view.focus();
+      }
     });
 
     editorWrapper.appendChild(textarea);
@@ -289,14 +333,35 @@ export class MermaidWidget extends MarkdownWidget {
     // Diagram Body (SVG Render)
     const body = document.createElement('div');
     body.className = 'as-diagram-body';
+    body.title = 'Double-click to edit diagram code';
+    body.ondblclick = (e) => {
+      e.stopPropagation();
+      if (currentMode === 'preview') {
+        currentMode = 'split';
+        stateObj.mode = 'split';
+        updateModeUI();
+        textarea.focus();
+      }
+    };
     contentWrapper.appendChild(body);
 
     container.appendChild(contentWrapper);
 
     // Function to render diagram SVG with caching and lazy loading
     const renderDiagram = async (code: string) => {
+      const trimmed = code.trim();
+      if (!trimmed) {
+        body.innerHTML = `
+          <div class="as-diagram-error">
+            <span class="as-diagram-error-title">Empty Diagram</span>
+            <span class="as-diagram-error-desc">Add Mermaid syntax in Code or Split mode to render.</span>
+          </div>
+        `;
+        return;
+      }
+
       const themeKey = document.documentElement.getAttribute('data-theme') || 'light';
-      const cacheKey = `${themeKey}:${code.trim()}`;
+      const cacheKey = `${themeKey}:${trimmed}`;
       const cached = svgCache.get(cacheKey);
       if (cached) {
         body.innerHTML = cached;
@@ -311,7 +376,7 @@ export class MermaidWidget extends MarkdownWidget {
       try {
         const m = await getMermaid();
         const renderId = `mermaid-${Math.random().toString(36).substring(2, 9)}`;
-        const { svg } = await m.render(renderId, code);
+        const { svg } = await m.render(renderId, trimmed);
         svgCache.set(cacheKey, svg);
         body.innerHTML = svg;
         const svgEl = body.querySelector('svg');
@@ -331,6 +396,7 @@ export class MermaidWidget extends MarkdownWidget {
 
     // Update Mode UI
     const updateModeUI = () => {
+      container.dataset.mode = currentMode;
       previewBtn.className = currentMode === 'preview' ? 'as-widget-btn as-widget-btn-active' : 'as-widget-btn';
       splitBtn.className = currentMode === 'split' ? 'as-widget-btn as-widget-btn-active' : 'as-widget-btn';
       codeBtn.className = currentMode === 'code' ? 'as-widget-btn as-widget-btn-active' : 'as-widget-btn';
@@ -340,33 +406,55 @@ export class MermaidWidget extends MarkdownWidget {
         body.style.display = 'flex';
         contentWrapper.className = 'as-diagram-content-wrapper';
       } else if (currentMode === 'code') {
-        editorWrapper.style.display = 'block';
+        editorWrapper.style.display = 'flex';
         body.style.display = 'none';
         contentWrapper.className = 'as-diagram-content-wrapper';
+        setTimeout(() => textarea.focus(), 50);
       } else if (currentMode === 'split') {
-        editorWrapper.style.display = 'block';
+        editorWrapper.style.display = 'flex';
         body.style.display = 'flex';
         contentWrapper.className = 'as-diagram-content-wrapper as-diagram-split';
+        setTimeout(() => textarea.focus(), 50);
       }
     };
 
     previewBtn.onclick = (e) => {
       e.stopPropagation();
       currentMode = 'preview';
+      stateObj.mode = 'preview';
       updateModeUI();
     };
 
     splitBtn.onclick = (e) => {
       e.stopPropagation();
       currentMode = 'split';
+      stateObj.mode = 'split';
       updateModeUI();
     };
 
     codeBtn.onclick = (e) => {
       e.stopPropagation();
       currentMode = 'code';
+      stateObj.mode = 'code';
       updateModeUI();
     };
+
+    // State object attached to container to support updateDOM without recreation
+    const stateObj: MermaidWidgetState = {
+      widget: this,
+      mode: currentMode,
+      onDocUpdate: (newSource: string) => {
+        const nextCode = extractCleanMermaidCode(newSource);
+        if (nextCode !== cleanCode) {
+          cleanCode = nextCode;
+          if (document.activeElement !== textarea && textarea.value !== cleanCode) {
+            textarea.value = cleanCode;
+            renderDiagram(cleanCode);
+          }
+        }
+      },
+    };
+    (container as any).__mermaidState = stateObj;
 
     // Initial render
     renderDiagram(cleanCode);

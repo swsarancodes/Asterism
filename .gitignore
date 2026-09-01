@@ -27,3 +27,4 @@ src-tauri/gen
 *.njsproj
 *.sln
 *.sw?
+graphify-out/

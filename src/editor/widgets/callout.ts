@@ -29,6 +29,23 @@ export function parseCallout(source: string): ParsedCallout {
   };
 }
 
+export function serializeCallout(type: CalloutType, title: string, body: string): string {
+  if (type === 'QUOTE') {
+    return body
+      .split('\n')
+      .map((l) => `> ${l}`)
+      .join('\n');
+  }
+  const header = `> [!${type}]${title && title.toUpperCase() !== type ? ` ${title}` : ''}`;
+  const bodyLines = body
+    ? body
+        .split('\n')
+        .map((l) => `> ${l}`)
+        .join('\n')
+    : '> ';
+  return `${header}\n${bodyLines}`;
+}
+
 const calloutIcons: Record<CalloutType, string> = {
   NOTE: 'ℹ️',
   TIP: '💡',
@@ -38,9 +55,26 @@ const calloutIcons: Record<CalloutType, string> = {
   QUOTE: '❝',
 };
 
+interface CalloutWidgetState {
+  widget: CalloutWidget;
+  onDocUpdate: (newSource: string) => void;
+}
+
 export class CalloutWidget extends MarkdownWidget {
+  updateDOM(dom: HTMLElement, _view: EditorView): boolean {
+    const state = (dom as any).__calloutState as CalloutWidgetState | undefined;
+    if (state) {
+      state.widget = this;
+      state.onDocUpdate(this.source);
+      return true;
+    }
+    return false;
+  }
+
   toDOM(view: EditorView): HTMLElement {
-    const parsed = parseCallout(this.source);
+    let currentSource = this.source;
+    let parsed = parseCallout(currentSource);
+
     const container = document.createElement('div');
     container.className = `as-callout as-callout-${parsed.type.toLowerCase()}`;
 
@@ -52,32 +86,70 @@ export class CalloutWidget extends MarkdownWidget {
     const contentDiv = document.createElement('div');
     contentDiv.className = 'as-callout-content';
 
-    if (parsed.title) {
-      const titleEl = document.createElement('div');
-      titleEl.className = 'as-callout-title';
-      titleEl.textContent = parsed.title;
-      contentDiv.appendChild(titleEl);
-    }
+    const titleEl = document.createElement('div');
+    titleEl.className = 'as-callout-title';
+    titleEl.textContent = parsed.title;
+    titleEl.contentEditable = 'true';
+    titleEl.spellcheck = false;
+    titleEl.title = 'Click to edit title';
 
-    if (parsed.body) {
-      const bodyEl = document.createElement('div');
-      bodyEl.className = 'as-callout-body';
-      bodyEl.textContent = parsed.body;
-      contentDiv.appendChild(bodyEl);
-    }
+    titleEl.onblur = () => {
+      const newTitle = titleEl.textContent || '';
+      if (newTitle !== parsed.title) {
+        parsed.title = newTitle;
+        const serialized = serializeCallout(parsed.type, parsed.title, parsed.body);
+        currentSource = serialized;
+        this.replace(view, serialized, container);
+      }
+    };
 
+    titleEl.onkeydown = (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        bodyEl.focus();
+      }
+    };
+
+    contentDiv.appendChild(titleEl);
+
+    const bodyEl = document.createElement('div');
+    bodyEl.className = 'as-callout-body';
+    bodyEl.textContent = parsed.body;
+    bodyEl.contentEditable = 'true';
+    bodyEl.spellcheck = false;
+    bodyEl.title = 'Click to edit callout text';
+
+    bodyEl.onblur = () => {
+      const newBody = bodyEl.textContent || '';
+      if (newBody !== parsed.body) {
+        parsed.body = newBody;
+        const serialized = serializeCallout(parsed.type, parsed.title, parsed.body);
+        currentSource = serialized;
+        this.replace(view, serialized, container);
+      }
+    };
+
+    contentDiv.appendChild(bodyEl);
     container.appendChild(contentDiv);
 
-    // Double click or edit affordance
-    container.title = 'Click to edit callout';
-    container.onclick = (e) => {
-      e.stopPropagation();
-      view.dispatch({
-        selection: { anchor: this.from, head: this.from },
-        scrollIntoView: true,
-      });
-      view.focus();
+    const stateObj: CalloutWidgetState = {
+      widget: this,
+      onDocUpdate: (newSource: string) => {
+        if (newSource !== currentSource) {
+          currentSource = newSource;
+          parsed = parseCallout(newSource);
+          iconSpan.textContent = calloutIcons[parsed.type] || 'ℹ️';
+          container.className = `as-callout as-callout-${parsed.type.toLowerCase()}`;
+          if (document.activeElement !== titleEl) {
+            titleEl.textContent = parsed.title;
+          }
+          if (document.activeElement !== bodyEl) {
+            bodyEl.textContent = parsed.body;
+          }
+        }
+      },
     };
+    (container as any).__calloutState = stateObj;
 
     return container;
   }

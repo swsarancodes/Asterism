@@ -1,47 +1,77 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useWorkspaceStore } from '../stores/workspace';
 import { useSettingsStore } from '../stores/settings';
 import {
   FileText,
+  Folder,
   FolderOpen,
+  FolderPlus,
   Plus,
   PanelLeftClose,
   BookOpen,
   Search,
   X,
   Pencil,
+  Trash2,
+  ChevronRight,
+  ChevronDown,
 } from 'lucide-react';
+import { formatDisplayName } from '../../core/document/file-meta';
 
 export const Sidebar: React.FC = () => {
   const documents = useWorkspaceStore((s) => s.documents);
+  const folders = useWorkspaceStore((s) => s.folders);
+  const collapsedIds = useWorkspaceStore((s) => s.collapsedIds);
   const activeId = useWorkspaceStore((s) => s.activeDocumentId);
   const setActiveDoc = useWorkspaceStore((s) => s.setActiveDocument);
-  const closeDoc = useWorkspaceStore((s) => s.closeDocument);
+  const deleteDoc = useWorkspaceStore((s) => s.deleteDocument);
   const createEmpty = useWorkspaceStore((s) => s.createEmptyDocument);
   const openDoc = useWorkspaceStore((s) => s.openDocument);
   const renameDoc = useWorkspaceStore((s) => s.renameDocument);
+
+  const createFolder = useWorkspaceStore((s) => s.createFolder);
+  const renameFolder = useWorkspaceStore((s) => s.renameFolder);
+  const deleteFolder = useWorkspaceStore((s) => s.deleteFolder);
+  const toggleCollapse = useWorkspaceStore((s) => s.toggleCollapse);
 
   const sidebarOpen = useSettingsStore((s) => s.sidebarOpen);
   const toggleSidebar = useSettingsStore((s) => s.toggleSidebar);
 
   const [query, setQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
+
+  // Renaming state
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingType, setEditingType] = useState<'doc' | 'folder'>('doc');
   const [editingName, setEditingName] = useState('');
+  const editInputRef = useRef<HTMLInputElement>(null);
 
-  const visibleDocuments = documents.filter((doc) =>
-    doc.meta.fileName.toLowerCase().includes(query.trim().toLowerCase())
-  );
+  useEffect(() => {
+    if (editingId && editInputRef.current) {
+      editInputRef.current.focus();
+      editInputRef.current.select();
+    }
+  }, [editingId]);
 
-  const handleStartRename = (docId: string, currentName: string, e?: React.MouseEvent) => {
+  const handleStartRename = (
+    id: string,
+    currentName: string,
+    type: 'doc' | 'folder',
+    e?: React.MouseEvent
+  ) => {
     if (e) e.stopPropagation();
-    setEditingId(docId);
-    setEditingName(currentName);
+    setEditingId(id);
+    setEditingType(type);
+    setEditingName(type === 'doc' ? formatDisplayName(currentName) : currentName);
   };
 
-  const handleFinishRename = (docId: string) => {
-    if (editingName.trim()) {
-      renameDoc(docId, editingName.trim());
+  const handleFinishRename = () => {
+    if (editingId && editingName.trim()) {
+      if (editingType === 'doc') {
+        renameDoc(editingId, editingName.trim());
+      } else {
+        renameFolder(editingId, editingName.trim());
+      }
     }
     setEditingId(null);
   };
@@ -82,32 +112,494 @@ serialization step. Saving is \`doc.toString()\` plus line-ending restoration.
     openDoc(specMarkdown, '03-editor-core-spec.md');
   };
 
+  // Search filter
+  const isSearching = query.trim().length > 0;
+  const filteredDocs = isSearching
+    ? documents.filter((doc) => {
+        const q = query.trim().toLowerCase();
+        return (
+          doc.meta.fileName.toLowerCase().includes(q) ||
+          formatDisplayName(doc.meta.fileName).toLowerCase().includes(q)
+        );
+      })
+    : [];
+
+  const filteredFolders = isSearching
+    ? folders.filter((f) => f.name.toLowerCase().includes(query.trim().toLowerCase()))
+    : [];
+
+  // Recursive Tree Node Renderer
+  const renderTree = (parentId: string | null = null, depth: number = 0): React.ReactNode => {
+    const childFolders = folders.filter((f) => f.parentId === parentId);
+    const childDocs = documents.filter((d) => (d.parentId ?? null) === parentId);
+
+    if (childFolders.length === 0 && childDocs.length === 0) {
+      return null;
+    }
+
+    return (
+      <div
+        key={`level-${parentId || 'root'}-${depth}`}
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          borderLeft: depth > 0 ? '1px solid var(--as-border-subtle, rgba(128,128,128,0.12))' : 'none',
+          marginLeft: depth > 0 ? '12px' : 0,
+          paddingLeft: depth > 0 ? '4px' : 0,
+        }}
+      >
+        {/* 1. Folders in this level */}
+        {childFolders.map((folder) => {
+          const isCollapsed = collapsedIds.includes(folder.id);
+          const hasChildren =
+            folders.some((f) => f.parentId === folder.id) ||
+            documents.some((d) => d.parentId === folder.id);
+          const isEditing = editingId === folder.id && editingType === 'folder';
+
+          return (
+            <div key={`folder-${folder.id}`} style={{ display: 'flex', flexDirection: 'column' }}>
+              <div
+                className="as-tree-node"
+                onClick={() => toggleCollapse(folder.id)}
+                onDoubleClick={(e) => handleStartRename(folder.id, folder.name, 'folder', e)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '5px 8px',
+                  borderRadius: 'var(--as-radius-sm)',
+                  fontSize: '13px',
+                  color: 'var(--as-text)',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  transition: 'background var(--as-transition-fast)',
+                  position: 'relative',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--as-bg-hover)')}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+              >
+                {/* Chevron expand/collapse */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleCollapse(folder.id);
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '14px',
+                    height: '14px',
+                    color: 'var(--as-text-muted)',
+                    opacity: hasChildren ? 0.9 : 0.3,
+                  }}
+                >
+                  {hasChildren ? (
+                    isCollapsed ? (
+                      <ChevronRight size={12} />
+                    ) : (
+                      <ChevronDown size={12} />
+                    )
+                  ) : (
+                    <span style={{ width: '12px' }} />
+                  )}
+                </button>
+
+                {/* Folder Icon */}
+                {isCollapsed ? (
+                  <Folder size={14} style={{ color: 'var(--as-accent)', flexShrink: 0 }} />
+                ) : (
+                  <FolderOpen size={14} style={{ color: 'var(--as-accent)', flexShrink: 0 }} />
+                )}
+
+                {/* Folder Title or Inline Edit */}
+                {isEditing ? (
+                  <input
+                    ref={editInputRef}
+                    autoFocus
+                    type="text"
+                    value={editingName}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => setEditingName(e.target.value)}
+                    onBlur={handleFinishRename}
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      if (e.key === 'Enter') handleFinishRename();
+                      if (e.key === 'Escape') setEditingId(null);
+                    }}
+                    style={{
+                      fontSize: '13px',
+                      fontFamily: 'inherit',
+                      color: 'var(--as-text)',
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      borderBottom: '1.5px solid var(--as-accent)',
+                      outline: 'none',
+                      padding: '0 1px',
+                      margin: 0,
+                      width: `${Math.max(40, (editingName.length + 1) * 7.5)}px`,
+                      minWidth: '40px',
+                    }}
+                  />
+                ) : (
+                  <span
+                    style={{
+                      flex: 1,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      fontWeight: 550,
+                    }}
+                    title={`${folder.name} (Double-click to rename)`}
+                  >
+                    {folder.name}
+                  </span>
+                )}
+
+                {/* Folder Actions on Hover */}
+                <div
+                  className="as-tree-actions"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '2px',
+                    opacity: 0,
+                    transition: 'opacity var(--as-transition-fast)',
+                  }}
+                >
+                  <button
+                    type="button"
+                    title="New Note in Folder"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      createEmpty(undefined, folder.id);
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--as-text-dim)',
+                      cursor: 'pointer',
+                      padding: '2px',
+                      borderRadius: '3px',
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--as-accent)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--as-text-dim)')}
+                  >
+                    <Plus size={12} />
+                  </button>
+
+                  <button
+                    type="button"
+                    title="New Subfolder"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      createFolder(undefined, folder.id);
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--as-text-dim)',
+                      cursor: 'pointer',
+                      padding: '2px',
+                      borderRadius: '3px',
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--as-accent)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--as-text-dim)')}
+                  >
+                    <FolderPlus size={11} />
+                  </button>
+
+                  <button
+                    type="button"
+                    title="Rename Folder"
+                    onClick={(e) => handleStartRename(folder.id, folder.name, 'folder', e)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--as-text-dim)',
+                      cursor: 'pointer',
+                      padding: '2px',
+                      borderRadius: '3px',
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--as-text)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--as-text-dim)')}
+                  >
+                    <Pencil size={11} />
+                  </button>
+
+                  <button
+                    type="button"
+                    title="Delete Folder"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteFolder(folder.id);
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--as-text-dim)',
+                      cursor: 'pointer',
+                      padding: '2px',
+                      borderRadius: '3px',
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = '#ef4444')}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--as-text-dim)')}
+                  >
+                    <Trash2 size={11} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Recursive Children of Folder */}
+              {!isCollapsed && renderTree(folder.id, depth + 1)}
+            </div>
+          );
+        })}
+
+        {/* 2. Documents in this level */}
+        {childDocs.map((doc) => {
+          const isActive = doc.id === activeId;
+          const isEditing = editingId === doc.id && editingType === 'doc';
+          const subpages = documents.filter((d) => d.parentId === doc.id);
+          const hasSubpages = subpages.length > 0;
+          const isCollapsed = collapsedIds.includes(doc.id);
+
+          return (
+            <div key={`doc-${doc.id}`} style={{ display: 'flex', flexDirection: 'column' }}>
+              <div
+                className="as-tree-node"
+                onClick={() => setActiveDoc(doc.id)}
+                onDoubleClick={(e) => handleStartRename(doc.id, doc.meta.fileName, 'doc', e)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '5px 8px',
+                  borderRadius: 'var(--as-radius-sm)',
+                  fontSize: '13px',
+                  fontWeight: isActive ? 600 : 400,
+                  color: isActive ? 'var(--as-text)' : 'var(--as-text-muted)',
+                  backgroundColor: isActive ? 'var(--as-bg-subtle)' : 'transparent',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  transition: 'background var(--as-transition-fast)',
+                  position: 'relative',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive) e.currentTarget.style.backgroundColor = 'var(--as-bg-hover)';
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
+                }}
+              >
+                {/* Chevron for subpages */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleCollapse(doc.id);
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '14px',
+                    height: '14px',
+                    color: 'var(--as-text-muted)',
+                    opacity: hasSubpages ? 0.9 : 0.3,
+                  }}
+                >
+                  {hasSubpages ? (
+                    isCollapsed ? (
+                      <ChevronRight size={12} />
+                    ) : (
+                      <ChevronDown size={12} />
+                    )
+                  ) : (
+                    <span style={{ width: '12px' }} />
+                  )}
+                </button>
+
+                {/* Document Icon */}
+                <FileText size={14} style={{ opacity: isActive ? 1 : 0.6, flexShrink: 0 }} />
+
+                {/* Document Title or Inline Edit */}
+                {isEditing ? (
+                  <input
+                    ref={editInputRef}
+                    autoFocus
+                    type="text"
+                    value={editingName}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => setEditingName(e.target.value)}
+                    onBlur={handleFinishRename}
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      if (e.key === 'Enter') handleFinishRename();
+                      if (e.key === 'Escape') setEditingId(null);
+                    }}
+                    style={{
+                      fontSize: '13px',
+                      fontWeight: isActive ? 600 : 400,
+                      fontFamily: 'inherit',
+                      color: 'var(--as-text)',
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      borderBottom: '1.5px solid var(--as-accent)',
+                      outline: 'none',
+                      padding: '0 1px',
+                      margin: 0,
+                      width: `${Math.max(40, (editingName.length + 1) * 7.5)}px`,
+                      minWidth: '40px',
+                    }}
+                  />
+                ) : (
+                  <span
+                    style={{
+                      flex: 1,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                    title={`${doc.meta.fileName} (Double-click to rename)`}
+                  >
+                    {formatDisplayName(doc.meta.fileName)}
+                  </span>
+                )}
+
+                {/* Document Actions on Hover */}
+                <div
+                  className="as-tree-actions"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '2px',
+                    opacity: 0,
+                    transition: 'opacity var(--as-transition-fast)',
+                  }}
+                >
+                  <button
+                    type="button"
+                    title="Add Subpage"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      createEmpty(undefined, doc.id);
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--as-text-dim)',
+                      cursor: 'pointer',
+                      padding: '2px',
+                      borderRadius: '3px',
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--as-accent)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--as-text-dim)')}
+                  >
+                    <Plus size={12} />
+                  </button>
+
+                  <button
+                    type="button"
+                    title="Rename Note"
+                    onClick={(e) => handleStartRename(doc.id, doc.meta.fileName, 'doc', e)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--as-text-dim)',
+                      cursor: 'pointer',
+                      padding: '2px',
+                      borderRadius: '3px',
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--as-text)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--as-text-dim)')}
+                  >
+                    <Pencil size={11} />
+                  </button>
+
+                  <button
+                    type="button"
+                    title="Delete Note"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteDoc(doc.id);
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--as-text-dim)',
+                      cursor: 'pointer',
+                      padding: '2px',
+                      borderRadius: '3px',
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = '#ef4444')}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--as-text-dim)')}
+                  >
+                    <Trash2 size={11} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Recursive Subpages of Document */}
+              {hasSubpages && !isCollapsed && renderTree(doc.id, depth + 1)}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <aside
-      aria-label="Sidebar navigation"
+      aria-label="File Navigation"
       style={{
-        width: sidebarOpen ? '240px' : '0px',
-        minWidth: sidebarOpen ? '240px' : '0px',
+        width: sidebarOpen ? '260px' : '0px',
+        minWidth: sidebarOpen ? '260px' : '0px',
         height: '100%',
         backgroundColor: 'var(--as-bg-surface)',
         borderRight: sidebarOpen ? '1px solid var(--as-border)' : 'none',
         display: 'flex',
         flexDirection: 'column',
+        transition: 'all var(--as-transition-normal)',
         overflow: 'hidden',
-        userSelect: 'none',
-        transition: 'width 240ms cubic-bezier(0.16, 1, 0.3, 1), min-width 240ms cubic-bezier(0.16, 1, 0.3, 1)',
+        zIndex: 20,
+        flexShrink: 0,
       }}
     >
       <div
         style={{
-          width: '240px',
-          minWidth: '240px',
+          width: '260px',
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
+          opacity: sidebarOpen ? 1 : 0,
+          transition: 'opacity var(--as-transition-fast)',
         }}
       >
-        {/* Top Header Row with Logo and Collapse Button */}
+        {/* Header Branding */}
         <div
           style={{
             display: 'flex',
@@ -120,7 +612,7 @@ serialization step. Saving is \`doc.toString()\` plus line-ending restoration.
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '16px', color: 'var(--as-accent)' }}>☞</span>
+            <span style={{ fontSize: '16px', color: 'var(--as-text)' }}>☞</span>
             <span style={{ fontWeight: 650, fontSize: '13.5px', letterSpacing: '-0.015em', color: 'var(--as-text)' }}>
               Manicule Studio
             </span>
@@ -174,7 +666,7 @@ serialization step. Saving is \`doc.toString()\` plus line-ending restoration.
             <Search size={13} style={{ color: 'var(--as-text-dim)', flexShrink: 0 }} />
             <input
               type="text"
-              placeholder="Search notes…"
+              placeholder="Search notes and folders…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onFocus={() => setSearchFocused(true)}
@@ -234,6 +726,32 @@ serialization step. Saving is \`doc.toString()\` plus line-ending restoration.
           >
             <Plus size={15} style={{ color: 'var(--as-accent)' }} />
             <span>New Note</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => createFolder()}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              width: '100%',
+              padding: '6px 10px',
+              backgroundColor: 'transparent',
+              border: 'none',
+              borderRadius: 'var(--as-radius-sm)',
+              color: 'var(--as-text)',
+              fontSize: '13px',
+              fontWeight: 500,
+              cursor: 'pointer',
+              textAlign: 'left',
+              transition: 'background var(--as-transition-fast)',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--as-bg-hover)')}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+          >
+            <FolderPlus size={15} style={{ color: 'var(--as-accent)' }} />
+            <span>New Folder</span>
           </button>
 
           <button
@@ -299,170 +817,141 @@ serialization step. Saving is \`doc.toString()\` plus line-ending restoration.
           </button>
         </div>
 
-        {/* Notes Section List */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '6px 8px 12px 8px' }}>
-          <div
+        {/* Section Header: Workspace */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '12px 14px 4px 14px',
+          }}
+        >
+          <span
             style={{
               fontSize: '11px',
               textTransform: 'uppercase',
               letterSpacing: '0.06em',
               color: 'var(--as-text-dim)',
-              padding: '8px 8px 4px 8px',
               fontWeight: 650,
             }}
           >
-            Notes ({visibleDocuments.length})
-          </div>
+            {isSearching ? `Results (${filteredDocs.length + filteredFolders.length})` : `Workspace (${documents.length})`}
+          </span>
 
-          {visibleDocuments.length === 0 ? (
-            <div style={{ padding: '12px 8px', fontSize: '12px', color: 'var(--as-text-dim)', fontStyle: 'italic' }}>
-              No notes found
+          {!isSearching && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <button
+                type="button"
+                title="New Folder"
+                onClick={() => createFolder()}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--as-text-dim)',
+                  cursor: 'pointer',
+                  padding: '2px',
+                  borderRadius: '3px',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--as-accent)')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--as-text-dim)')}
+              >
+                <FolderPlus size={13} />
+              </button>
+              <button
+                type="button"
+                title="New Note"
+                onClick={() => createEmpty()}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--as-text-dim)',
+                  cursor: 'pointer',
+                  padding: '2px',
+                  borderRadius: '3px',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--as-accent)')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--as-text-dim)')}
+              >
+                <Plus size={13} />
+              </button>
             </div>
-          ) : (
-            visibleDocuments.map((doc) => {
-              const isActive = doc.id === activeId;
-              const isEditing = doc.id === editingId;
+          )}
+        </div>
 
-              return (
+        {/* Tree Container */}
+        <div
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            padding: '4px 8px 16px 8px',
+          }}
+        >
+          {isSearching ? (
+            // Search Results Flat List
+            <div>
+              {filteredFolders.map((f) => (
                 <div
-                  key={doc.id}
-                  onClick={() => setActiveDoc(doc.id)}
-                  onDoubleClick={(e) => handleStartRename(doc.id, doc.meta.fileName, e)}
+                  key={`search-folder-${f.id}`}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '8px',
-                    padding: '6px 10px',
+                    gap: '6px',
+                    padding: '6px 8px',
                     borderRadius: 'var(--as-radius-sm)',
                     fontSize: '13px',
-                    fontWeight: isActive ? 600 : 400,
-                    color: isActive ? 'var(--as-text)' : 'var(--as-text-muted)',
-                    backgroundColor: isActive ? 'var(--as-bg-subtle)' : 'transparent',
-                    cursor: 'pointer',
-                    marginBottom: '1px',
-                    transition: 'all var(--as-transition-fast)',
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isActive) e.currentTarget.style.backgroundColor = 'var(--as-bg-hover)';
-                    const actions = e.currentTarget.querySelector('.as-note-actions') as HTMLElement;
-                    if (actions) actions.style.opacity = '1';
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
-                    const actions = e.currentTarget.querySelector('.as-note-actions') as HTMLElement;
-                    if (actions) actions.style.opacity = '0';
+                    color: 'var(--as-text)',
                   }}
                 >
-                  <FileText size={14} style={{ opacity: isActive ? 1 : 0.6, flexShrink: 0 }} />
-
-                  {isEditing ? (
-                    <input
-                      autoFocus
-                      type="text"
-                      value={editingName}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => setEditingName(e.target.value)}
-                      onBlur={() => handleFinishRename(doc.id)}
-                      onKeyDown={(e) => {
-                        e.stopPropagation();
-                        if (e.key === 'Enter') {
-                          handleFinishRename(doc.id);
-                        } else if (e.key === 'Escape') {
-                          setEditingId(null);
-                        }
-                      }}
-                      style={{
-                        flex: 1,
-                        fontSize: '12.5px',
-                        padding: '2px 4px',
-                        color: 'var(--as-text)',
-                        backgroundColor: 'var(--as-bg-surface)',
-                        border: '1px solid var(--as-accent)',
-                        borderRadius: '3px',
-                        outline: 'none',
-                      }}
-                    />
-                  ) : (
-                    <span
-                      title="Double-click to rename note"
-                      style={{
-                        flex: 1,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {doc.meta.fileName}
-                    </span>
-                  )}
-
-                  {doc.isDirty && (
-                    <span
-                      style={{
-                        width: '6px',
-                        height: '6px',
-                        borderRadius: '50%',
-                        backgroundColor: 'var(--as-accent)',
-                        flexShrink: 0,
-                      }}
-                    />
-                  )}
-
-                  {/* Actions: Rename & Close */}
+                  <Folder size={14} style={{ color: 'var(--as-accent)' }} />
+                  <span style={{ fontWeight: 550 }}>{f.name}</span>
+                </div>
+              ))}
+              {filteredDocs.map((doc) => {
+                const isActive = doc.id === activeId;
+                return (
                   <div
-                    className="as-note-actions"
+                    key={`search-doc-${doc.id}`}
+                    onClick={() => setActiveDoc(doc.id)}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '3px',
-                      opacity: 0,
-                      transition: 'opacity var(--as-transition-fast)',
+                      gap: '6px',
+                      padding: '6px 8px',
+                      borderRadius: 'var(--as-radius-sm)',
+                      fontSize: '13px',
+                      fontWeight: isActive ? 600 : 400,
+                      color: isActive ? 'var(--as-text)' : 'var(--as-text-muted)',
+                      backgroundColor: isActive ? 'var(--as-bg-subtle)' : 'transparent',
+                      cursor: 'pointer',
                     }}
                   >
-                    <button
-                      type="button"
-                      title="Rename Note"
-                      onClick={(e) => handleStartRename(doc.id, doc.meta.fileName, e)}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: 'var(--as-text-dim)',
-                        cursor: 'pointer',
-                        padding: '2px',
-                        borderRadius: '3px',
-                        display: 'flex',
-                        alignItems: 'center',
-                      }}
-                    >
-                      <Pencil size={11} />
-                    </button>
-
-                    {documents.length > 1 && (
-                      <button
-                        type="button"
-                        title="Close Note"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          closeDoc(doc.id);
-                        }}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: 'var(--as-text-dim)',
-                          cursor: 'pointer',
-                          padding: '2px',
-                          borderRadius: '3px',
-                          display: 'flex',
-                          alignItems: 'center',
-                        }}
-                      >
-                        <X size={11} />
-                      </button>
-                    )}
+                    <FileText size={14} style={{ opacity: isActive ? 1 : 0.6 }} />
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {formatDisplayName(doc.meta.fileName)}
+                    </span>
                   </div>
+                );
+              })}
+              {filteredFolders.length === 0 && filteredDocs.length === 0 && (
+                <div style={{ padding: '12px 8px', fontSize: '12px', color: 'var(--as-text-dim)', fontStyle: 'italic' }}>
+                  No matches found
                 </div>
-              );
-            })
+              )}
+            </div>
+          ) : (
+            // Notion Hierarchical Tree
+            <>
+              {renderTree(null, 0)}
+              {documents.length === 0 && folders.length === 0 && (
+                <div style={{ padding: '12px 8px', fontSize: '12px', color: 'var(--as-text-dim)', fontStyle: 'italic' }}>
+                  No notes yet. Click + to create one.
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

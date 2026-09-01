@@ -15,7 +15,11 @@ import {
   AlertTriangle,
   Minus,
   Type,
+  Link as LinkIcon,
+  FilePlus,
 } from 'lucide-react';
+import { useWorkspaceStore } from '../stores/workspace';
+import { formatDisplayName } from '../../core/document/file-meta';
 import {
   setHeadingLevel,
   setBulletList,
@@ -29,6 +33,7 @@ import {
   insertCodeBlockTemplate,
   insertCalloutTemplate,
   insertDividerTemplate,
+  insertLinkTemplate,
 } from '../../editor/commands/formatting';
 
 export interface SlashMenuProps {
@@ -136,6 +141,38 @@ export const SlashCommandMenu: React.FC<SlashMenuProps> = ({
       action: (v, r) => {
         v.dispatch({ changes: { from: r.from, to: r.to, insert: '' } });
         setTaskList(v);
+      },
+    },
+    {
+      id: 'link',
+      title: 'Link',
+      description: 'Attach a web link or hyperlink',
+      category: 'Basic',
+      icon: LinkIcon,
+      action: (v, r) => {
+        insertLinkTemplate(v, r);
+      },
+    },
+    {
+      id: 'subpage',
+      title: 'Subpage',
+      description: 'Create a new subpage nested inside this note',
+      category: 'Basic',
+      icon: FilePlus,
+      action: (v, r) => {
+        const store = useWorkspaceStore.getState();
+        const activeId = store.activeDocumentId;
+        store.createEmptyDocument(undefined, activeId);
+        const newDocId = useWorkspaceStore.getState().activeDocumentId;
+        const newDoc = useWorkspaceStore.getState().documents.find((d) => d.id === newDocId);
+        const title = newDoc ? formatDisplayName(newDoc.meta.fileName) : 'Subpage';
+        v.dispatch({
+          changes: {
+            from: r.from,
+            to: r.to,
+            insert: `[📄 ${title}](#${newDocId})\n`,
+          },
+        });
       },
     },
     {

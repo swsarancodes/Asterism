@@ -1,5 +1,14 @@
 import { create } from 'zustand';
-import { DocumentState, createDocumentState } from '../../core/document/document';
+import { persist, createJSONStorage, StateStorage } from 'zustand/middleware';
+import {
+  DocumentState,
+  createDocumentState,
+  generateDocId,
+  FolderItem,
+  createFolderItem,
+  syncDocumentHeading,
+} from '../../core/document/document';
+import { formatDisplayName } from '../../core/document/file-meta';
 
 const WELCOME_DOC = `# Manicule ☞
 
@@ -48,36 +57,46 @@ flowchart TD
 > You can toggle between **Hybrid View** (\`⌘1\`), **Source View** (\`⌘2\`), and **Split View** (\`⌘3\`) anytime using keyboard shortcuts.
 
 > [!IMPORTANT]
-> The search index is a disposable cache. Plain \`.md\` files on disk are always the single source of truth.
+> The top floating toolbar appears smoothly whenever you highlight text, giving you 1-click styling, lists, and turn-into dropdowns.
 
 ---
 
-## 4. Interactive Task List
-
-- [x] Fast incremental parsing with Lezer
-- [x] Interactive clickable task list checkboxes
-- [x] Notion-style tables with column alignment and live editing
-- [x] Live Mermaid diagrams with theme matching
-- [ ] Try creating your own table or diagram below!
-
----
-
-## 5. Fenced Code Blocks
-
-\`\`\`typescript
-interface ManiculeDocument {
-  source: string; // The single source of truth
-  isByteFaithful: true;
-  widgets: ['table', 'mermaid', 'callout', 'checkbox'];
-}
-\`\`\`
-
----
-*Press \`⌘K\` or \`⌘P\` to open the command palette.*
+## 4. Key Highlights
+* **Zero Disruption Hybrid Mode**: Type freely with live concealment.
+* **Smart Delimiter Guard**: No accidental deletions of closing asterisks or brackets.
+* **Sub-millisecond Stats**: Word count, character count, and reading time computed on every keystroke.
+* **Nested Folders & Subpages**: Complete Notion-style organization.
 `;
+
+const safeStorage: StateStorage = {
+  getItem: (name: string): string | null => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        return window.localStorage.getItem(name);
+      }
+    } catch {}
+    return null;
+  },
+  setItem: (name: string, value: string): void => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(name, value);
+      }
+    } catch {}
+  },
+  removeItem: (name: string): void => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.removeItem(name);
+      }
+    } catch {}
+  },
+};
 
 export interface WorkspaceState {
   documents: DocumentState[];
+  folders: FolderItem[];
+  collapsedIds: string[];
   activeDocumentId: string | null;
   cursorLine: number;
   cursorCol: number;
@@ -85,145 +104,415 @@ export interface WorkspaceState {
   charCount: number;
   readingTimeMin: number;
 
-  createEmptyDocument: (title?: string) => void;
+  createEmptyDocument: (title?: string, parentId?: string | null) => void;
+  createFolder: (name?: string, parentId?: string | null) => void;
+  renameFolder: (id: string, newName: string) => void;
+  deleteFolder: (id: string) => void;
+  toggleCollapse: (id: string) => void;
+  moveItem: (itemId: string, newParentId: string | null) => void;
   openDocument: (content: string, filePath?: string | null) => void;
   setActiveDocument: (id: string) => void;
   closeDocument: (id: string) => void;
+  deleteDocument: (id: string) => void;
   updateDocumentContent: (id: string, newContent: string) => void;
   renameDocument: (id: string, newName: string) => void;
   markDocumentSaved: (id: string, newPath?: string) => void;
   updateCursorPosition: (line: number, col: number) => void;
-  updateCursorStats: (line: number, col: number, docText?: string) => void;
+  updateCursorStats: (line: number, col: number) => void;
 }
 
-const initialDoc = createDocumentState(WELCOME_DOC, 'Welcome.md');
+const initialDoc = createDocumentState(WELCOME_DOC, null);
+initialDoc.meta.fileName = 'Welcome.md';
 
-export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
-  documents: [initialDoc],
-  activeDocumentId: initialDoc.id,
-  cursorLine: 1,
-  cursorCol: 1,
-  wordCount: computeWordCount(WELCOME_DOC),
-  charCount: WELCOME_DOC.length,
-  readingTimeMin: computeReadingTime(computeWordCount(WELCOME_DOC)),
-
-  createEmptyDocument: (title = 'Untitled.md') => {
-    const newDoc = createDocumentState('', title);
-    set((state) => ({
-      documents: [...state.documents, newDoc],
-      activeDocumentId: newDoc.id,
-    }));
-  },
-
-  openDocument: (content: string, filePath = null) => {
-    const doc = createDocumentState(content, filePath);
-    set((state) => {
-      const existing = state.documents.find((d) => d.meta.filePath === filePath && filePath !== null);
-      if (existing) {
-        return { activeDocumentId: existing.id };
+function getDescendantDocIds(parentDocId: string, documents: DocumentState[]): Set<string> {
+  const result = new Set<string>();
+  function recurse(id: string) {
+    for (const doc of documents) {
+      if (doc.parentId === id && !result.has(doc.id)) {
+        result.add(doc.id);
+        recurse(doc.id);
       }
-      return {
-        documents: [...state.documents, doc],
-        activeDocumentId: doc.id,
-      };
-    });
-  },
-
-  setActiveDocument: (id: string) => {
-    const doc = get().documents.find((d) => d.id === id);
-    if (doc) {
-      set({
-        activeDocumentId: id,
-        wordCount: computeWordCount(doc.currentText),
-        charCount: doc.currentText.length,
-        readingTimeMin: computeReadingTime(computeWordCount(doc.currentText)),
-      });
     }
-  },
+  }
+  recurse(parentDocId);
+  return result;
+}
 
-  closeDocument: (id: string) => {
-    set((state) => {
-      const remaining = state.documents.filter((d) => d.id !== id);
-      const nextActive = state.activeDocumentId === id ? (remaining[0]?.id ?? null) : state.activeDocumentId;
-      return {
-        documents: remaining,
-        activeDocumentId: nextActive,
-      };
-    });
-  },
+function getDescendantFolderIds(parentFolderId: string, folders: FolderItem[]): Set<string> {
+  const result = new Set<string>();
+  function recurse(id: string) {
+    for (const f of folders) {
+      if (f.parentId === id && !result.has(f.id)) {
+        result.add(f.id);
+        recurse(f.id);
+      }
+    }
+  }
+  recurse(parentFolderId);
+  return result;
+}
 
-  renameDocument: (id: string, newName: string) => {
-    const trimmed = newName.trim();
-    if (!trimmed) return;
-    const finalName = trimmed.includes('.') ? trimmed : `${trimmed}.md`;
+export const useWorkspaceStore = create<WorkspaceState>()(
+  persist(
+    (set, get) => ({
+      documents: [initialDoc],
+      folders: [],
+      collapsedIds: [],
+      activeDocumentId: initialDoc.id,
+      cursorLine: 1,
+      cursorCol: 1,
+      wordCount: computeWordCount(WELCOME_DOC),
+      charCount: WELCOME_DOC.length,
+      readingTimeMin: computeReadingTime(computeWordCount(WELCOME_DOC)),
 
-    set((state) => ({
-      documents: state.documents.map((doc) => {
-        if (doc.id === id) {
+      createEmptyDocument: (title?: string, parentId: string | null = null) => {
+        set((state) => {
+          let fileName = title;
+          if (!fileName) {
+            let n = 1;
+            const existingNames = new Set(
+              state.documents
+                .filter((d) => d.parentId === parentId)
+                .map((d) => d.meta.fileName.toLowerCase())
+            );
+            while (existingNames.has(`untitled-${n}.md`) || existingNames.has(`untitled-${n}`)) {
+              n++;
+            }
+            fileName = `Untitled-${n}.md`;
+          }
+          const displayName = formatDisplayName(fileName);
+          const initialContent = `# ${displayName}\n\n`;
+          const newDoc = createDocumentState(initialContent, null, parentId);
+          newDoc.meta.fileName = fileName;
+
+          const nextCollapsed = parentId
+            ? state.collapsedIds.filter((cid) => cid !== parentId)
+            : state.collapsedIds;
+
           return {
-            ...doc,
-            isDirty: true,
-            meta: {
-              ...doc.meta,
-              fileName: finalName,
-            },
+            documents: [...state.documents, newDoc],
+            activeDocumentId: newDoc.id,
+            collapsedIds: nextCollapsed,
+            wordCount: computeWordCount(initialContent),
+            charCount: initialContent.length,
+            readingTimeMin: computeReadingTime(computeWordCount(initialContent)),
           };
-        }
-        return doc;
-      }),
-    }));
-  },
+        });
+      },
 
-  updateDocumentContent: (id: string, newContent: string) => {
-    const words = computeWordCount(newContent);
-    set((state) => ({
-      documents: state.documents.map((doc) => {
-        if (doc.id === id) {
-          const isDirty = newContent !== doc.initialText;
-          return { ...doc, currentText: newContent, isDirty };
-        }
-        return doc;
-      }),
-      wordCount: words,
-      charCount: newContent.length,
-      readingTimeMin: computeReadingTime(words),
-    }));
-  },
+      createFolder: (name?: string, parentId: string | null = null) => {
+        set((state) => {
+          let folderName = name?.trim();
+          if (!folderName) {
+            let n = 1;
+            const existing = new Set(
+              state.folders
+                .filter((f) => f.parentId === parentId)
+                .map((f) => f.name.toLowerCase())
+            );
+            while (existing.has(`new folder ${n}`.toLowerCase()) || (n === 1 && existing.has('new folder'))) {
+              n++;
+            }
+            folderName = n === 1 && !existing.has('new folder') ? 'New Folder' : `New Folder ${n}`;
+          }
 
-  markDocumentSaved: (id: string, newPath?: string) => {
-    set((state) => ({
-      documents: state.documents.map((doc) => {
-        if (doc.id === id) {
+          const newFolder = createFolderItem(folderName, parentId);
+          const nextCollapsed = parentId
+            ? state.collapsedIds.filter((cid) => cid !== parentId)
+            : state.collapsedIds;
+
           return {
-            ...doc,
-            initialText: doc.currentText,
-            isDirty: false,
-            meta: {
-              ...doc.meta,
-              filePath: newPath || doc.meta.filePath,
-              fileName: newPath ? newPath.split(/[\/\\]/).pop() || doc.meta.fileName : doc.meta.fileName,
-            },
+            folders: [...state.folders, newFolder],
+            collapsedIds: nextCollapsed,
           };
+        });
+      },
+
+      renameFolder: (id: string, newName: string) => {
+        const trimmed = newName.trim();
+        if (!trimmed) return;
+        set((state) => ({
+          folders: state.folders.map((f) => (f.id === id ? { ...f, name: trimmed } : f)),
+        }));
+      },
+
+      deleteFolder: (id: string) => {
+        set((state) => {
+          const descendantFolderIds = getDescendantFolderIds(id, state.folders);
+          const folderIdsToDelete = new Set([id, ...descendantFolderIds]);
+
+          const docIdsInFolders = new Set<string>();
+          for (const doc of state.documents) {
+            if (doc.parentId && folderIdsToDelete.has(doc.parentId)) {
+              docIdsInFolders.add(doc.id);
+            }
+          }
+
+          const allDocIdsToDelete = new Set<string>();
+          for (const docId of docIdsInFolders) {
+            allDocIdsToDelete.add(docId);
+            const subs = getDescendantDocIds(docId, state.documents);
+            for (const s of subs) allDocIdsToDelete.add(s);
+          }
+
+          const remainingFolders = state.folders.filter((f) => !folderIdsToDelete.has(f.id));
+          const remainingDocs = state.documents.filter((d) => !allDocIdsToDelete.has(d.id));
+
+          let nextDocs = remainingDocs;
+          let nextActive = state.activeDocumentId;
+
+          if (remainingDocs.length === 0) {
+            const fresh = createDocumentState('', null);
+            fresh.meta.fileName = 'Untitled-1.md';
+            nextDocs = [fresh];
+            nextActive = fresh.id;
+          } else if (allDocIdsToDelete.has(state.activeDocumentId || '')) {
+            nextActive = remainingDocs[0]?.id ?? null;
+          }
+
+          const activeDoc = nextDocs.find((d) => d.id === nextActive);
+          return {
+            folders: remainingFolders,
+            documents: nextDocs,
+            activeDocumentId: nextActive,
+            wordCount: activeDoc ? computeWordCount(activeDoc.currentText) : 0,
+            charCount: activeDoc ? activeDoc.currentText.length : 0,
+            readingTimeMin: activeDoc ? computeReadingTime(computeWordCount(activeDoc.currentText)) : 0,
+          };
+        });
+      },
+
+      toggleCollapse: (id: string) => {
+        set((state) => ({
+          collapsedIds: state.collapsedIds.includes(id)
+            ? state.collapsedIds.filter((cid) => cid !== id)
+            : [...state.collapsedIds, id],
+        }));
+      },
+
+      moveItem: (itemId: string, newParentId: string | null) => {
+        set((state) => {
+          const isFolder = state.folders.some((f) => f.id === itemId);
+          if (isFolder) {
+            const descendants = getDescendantFolderIds(itemId, state.folders);
+            if (newParentId === itemId || (newParentId && descendants.has(newParentId))) {
+              return state;
+            }
+            return {
+              folders: state.folders.map((f) =>
+                f.id === itemId ? { ...f, parentId: newParentId } : f
+              ),
+            };
+          }
+
+          const isDoc = state.documents.some((d) => d.id === itemId);
+          if (isDoc) {
+            const docDescendants = getDescendantDocIds(itemId, state.documents);
+            if (newParentId === itemId || (newParentId && docDescendants.has(newParentId))) {
+              return state;
+            }
+            return {
+              documents: state.documents.map((d) =>
+                d.id === itemId ? { ...d, parentId: newParentId } : d
+              ),
+            };
+          }
+
+          return state;
+        });
+      },
+
+      openDocument: (content: string, filePath = null) => {
+        const doc = createDocumentState(content, filePath);
+        set((state) => {
+          const existing = state.documents.find((d) => d.meta.filePath === filePath && filePath !== null);
+          if (existing) {
+            return { activeDocumentId: existing.id };
+          }
+          return {
+            documents: [...state.documents, doc],
+            activeDocumentId: doc.id,
+          };
+        });
+      },
+
+      setActiveDocument: (id: string) => {
+        const doc = get().documents.find((d) => d.id === id);
+        if (doc) {
+          set({
+            activeDocumentId: id,
+            wordCount: computeWordCount(doc.currentText),
+            charCount: doc.currentText.length,
+            readingTimeMin: computeReadingTime(computeWordCount(doc.currentText)),
+          });
         }
-        return doc;
+      },
+
+      closeDocument: (id: string) => {
+        get().deleteDocument(id);
+      },
+
+      deleteDocument: (id: string) => {
+        set((state) => {
+          const descendantDocIds = getDescendantDocIds(id, state.documents);
+          const idsToDelete = new Set([id, ...descendantDocIds]);
+
+          const remaining = state.documents.filter((d) => !idsToDelete.has(d.id));
+          if (remaining.length === 0) {
+            const fresh = createDocumentState('', null);
+            fresh.meta.fileName = 'Untitled-1.md';
+            return {
+              documents: [fresh],
+              activeDocumentId: fresh.id,
+              wordCount: 0,
+              charCount: 0,
+              readingTimeMin: 0,
+            };
+          }
+          const nextActive = idsToDelete.has(state.activeDocumentId || '')
+            ? (remaining[0]?.id ?? null)
+            : state.activeDocumentId;
+          const activeDoc = remaining.find((d) => d.id === nextActive);
+          return {
+            documents: remaining,
+            activeDocumentId: nextActive,
+            wordCount: activeDoc ? computeWordCount(activeDoc.currentText) : 0,
+            charCount: activeDoc ? activeDoc.currentText.length : 0,
+            readingTimeMin: activeDoc ? computeReadingTime(computeWordCount(activeDoc.currentText)) : 0,
+          };
+        });
+      },
+
+      renameDocument: (id: string, newName: string) => {
+        const trimmed = newName.trim();
+        if (!trimmed) return;
+
+        set((state) => {
+          const updatedDocs = state.documents.map((doc) => {
+            if (doc.id === id) {
+              const hadMd = doc.meta.fileName.toLowerCase().endsWith('.md');
+              let finalName = trimmed;
+              if (hadMd && !trimmed.toLowerCase().endsWith('.md')) {
+                finalName = `${trimmed}.md`;
+              } else if (!trimmed.includes('.')) {
+                finalName = `${trimmed}.md`;
+              }
+
+              const displayName = formatDisplayName(finalName);
+              const updatedText = syncDocumentHeading(doc.currentText, displayName);
+
+              return {
+                ...doc,
+                currentText: updatedText,
+                isDirty: doc.isDirty || updatedText !== doc.initialText,
+                meta: {
+                  ...doc.meta,
+                  fileName: finalName,
+                },
+              };
+            }
+            return doc;
+          });
+
+          const activeDoc = updatedDocs.find((d) => d.id === state.activeDocumentId);
+          return {
+            documents: updatedDocs,
+            wordCount: activeDoc ? computeWordCount(activeDoc.currentText) : state.wordCount,
+            charCount: activeDoc ? activeDoc.currentText.length : state.charCount,
+            readingTimeMin: activeDoc ? computeReadingTime(computeWordCount(activeDoc.currentText)) : state.readingTimeMin,
+          };
+        });
+      },
+
+      updateDocumentContent: (id: string, newContent: string) => {
+        const words = computeWordCount(newContent);
+        set((state) => ({
+          documents: state.documents.map((doc) => {
+            if (doc.id === id) {
+              const isDirty = newContent !== doc.initialText;
+              return { ...doc, currentText: newContent, isDirty };
+            }
+            return doc;
+          }),
+          wordCount: words,
+          charCount: newContent.length,
+          readingTimeMin: computeReadingTime(words),
+        }));
+      },
+
+      markDocumentSaved: (id: string, newPath?: string) => {
+        set((state) => ({
+          documents: state.documents.map((doc) => {
+            if (doc.id === id) {
+              return {
+                ...doc,
+                initialText: doc.currentText,
+                isDirty: false,
+                meta: {
+                  ...doc.meta,
+                  filePath: newPath || doc.meta.filePath,
+                  fileName: newPath ? newPath.split(/[\/\\]/).pop() || doc.meta.fileName : doc.meta.fileName,
+                },
+              };
+            }
+            return doc;
+          }),
+        }));
+      },
+
+      updateCursorPosition: (line: number, col: number) => {
+        set((state) => {
+          if (state.cursorLine === line && state.cursorCol === col) return state;
+          return { cursorLine: line, cursorCol: col };
+        });
+      },
+
+      updateCursorStats: (line: number, col: number) => {
+        set((state) => {
+          if (state.cursorLine === line && state.cursorCol === col) return state;
+          return { cursorLine: line, cursorCol: col };
+        });
+      },
+    }),
+    {
+      name: 'manicule_workspace_history',
+      storage: createJSONStorage(() => safeStorage),
+      partialize: (state) => ({
+        documents: state.documents,
+        folders: state.folders,
+        collapsedIds: state.collapsedIds,
+        activeDocumentId: state.activeDocumentId,
       }),
-    }));
-  },
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          state.folders = state.folders || [];
+          state.collapsedIds = state.collapsedIds || [];
 
-  updateCursorPosition: (line: number, col: number) => {
-    set((state) => {
-      if (state.cursorLine === line && state.cursorCol === col) return state;
-      return { cursorLine: line, cursorCol: col };
-    });
-  },
+          if (state.documents && state.documents.length > 0) {
+            const seenIds = new Set<string>();
+            state.documents = state.documents.map((doc) => {
+              let id = doc.id;
+              if (!id || seenIds.has(id)) {
+                id = generateDocId();
+              }
+              seenIds.add(id);
+              return { ...doc, id, parentId: doc.parentId ?? null };
+            });
 
-  updateCursorStats: (line: number, col: number) => {
-    set((state) => {
-      if (state.cursorLine === line && state.cursorCol === col) return state;
-      return { cursorLine: line, cursorCol: col };
-    });
-  },
-}));
+            const activeDoc =
+              state.documents.find((d) => d.id === state.activeDocumentId) || state.documents[0];
+            if (activeDoc) {
+              state.activeDocumentId = activeDoc.id;
+              state.wordCount = computeWordCount(activeDoc.currentText);
+              state.charCount = activeDoc.currentText.length;
+              state.readingTimeMin = computeReadingTime(state.wordCount);
+            }
+          }
+        }
+      },
+    }
+  )
+);
 
 export function computeWordCount(text: string): number {
   let count = 0;

@@ -435,6 +435,76 @@ export function insertDividerTemplate(view: EditorView, replaceRange?: { from: n
 }
 
 /**
+ * Wraps or updates selection with a markdown link [text](url).
+ * If selection is already a markdown link, updates its URL or text.
+ */
+export function wrapWithLink(view: EditorView, url: string, customText?: string) {
+  const { state } = view;
+  const sel = state.selection.main;
+  const rawUrl = url.trim();
+  if (!rawUrl) return;
+
+  const normalizedUrl = /^https?:\/\/|^mailto:|^#|^\/|^\./i.test(rawUrl)
+    ? rawUrl
+    : `https://${rawUrl}`;
+
+  if (sel.empty) {
+    const textToInsert = customText || 'link';
+    const linkMarkdown = `[${textToInsert}](${normalizedUrl})`;
+    view.dispatch({
+      changes: { from: sel.from, to: sel.to, insert: linkMarkdown },
+      selection: EditorSelection.single(sel.from + 1, sel.from + 1 + textToInsert.length),
+    });
+    view.focus();
+    return;
+  }
+
+  const selected = state.doc.sliceString(sel.from, sel.to);
+  const linkMatch = selected.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+  const textContent = customText || (linkMatch ? linkMatch[1] : selected);
+  const linkMarkdown = `[${textContent}](${normalizedUrl})`;
+
+  view.dispatch({
+    changes: { from: sel.from, to: sel.to, insert: linkMarkdown },
+    selection: EditorSelection.single(sel.from, sel.from + linkMarkdown.length),
+  });
+  view.focus();
+}
+
+/**
+ * Removes a markdown link and restores plain text [text](url) -> text.
+ */
+export function removeLink(view: EditorView) {
+  const { state } = view;
+  const sel = state.selection.main;
+  if (sel.empty) return;
+
+  const selected = state.doc.sliceString(sel.from, sel.to);
+  const linkMatch = selected.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+  if (linkMatch) {
+    const plainText = linkMatch[1];
+    view.dispatch({
+      changes: { from: sel.from, to: sel.to, insert: plainText },
+      selection: EditorSelection.single(sel.from, sel.from + plainText.length),
+    });
+    view.focus();
+  }
+}
+
+/**
+ * Inserts a markdown link template.
+ */
+export function insertLinkTemplate(view: EditorView, replaceRange?: { from: number; to: number }) {
+  const target = replaceRange || { from: view.state.selection.main.from, to: view.state.selection.main.to };
+  const template = `[link](https://)`;
+  view.dispatch({
+    changes: { from: target.from, to: target.to, insert: template },
+    selection: EditorSelection.single(target.from + 7, target.from + 15),
+  });
+  view.focus();
+}
+
+/**
  * Standard Markdown Keyboard Shortcuts:
  * ⌘B / Ctrl+B -> Bold
  * ⌘I / Ctrl+I -> Italic

@@ -258,6 +258,17 @@ export function delimiterGuard(): Extension {
   return [
     Prec.highest(EditorView.domEventHandlers({
       keydown(e, view) {
+        const target = e.target as HTMLElement | null;
+        if (
+          target &&
+          (target.tagName === 'TEXTAREA' ||
+            target.tagName === 'INPUT' ||
+            target.isContentEditable ||
+            target.closest?.('.as-diagram-container, .as-table-container, .as-codeblock-container'))
+        ) {
+          return false;
+        }
+
         if (e.key === 'Backspace') {
           if (smartBackspace(view)) {
             e.preventDefault();

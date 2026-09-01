@@ -57,3 +57,12 @@ export function simpleHash(str: string): string {
   }
   return hash.toString(16);
 }
+
+/**
+ * Returns a clean, human-friendly display title for UI by stripping .md / .markdown extensions.
+ * e.g. "Project Notes.md" -> "Project Notes"
+ */
+export function formatDisplayName(fileName: string): string {
+  if (!fileName) return 'Untitled';
+  return fileName.replace(/\.(md|markdown)$/i, '');
+}

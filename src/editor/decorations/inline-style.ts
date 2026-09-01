@@ -6,7 +6,7 @@ const strongDeco = Decoration.mark({ class: 'as-strong' });
 const emDeco = Decoration.mark({ class: 'as-em' });
 const strikeDeco = Decoration.mark({ class: 'as-strike' });
 const codeInlineDeco = Decoration.mark({ class: 'as-code-inline' });
-const linkDeco = Decoration.mark({ class: 'as-link' });
+const linkDeco = Decoration.mark({ class: 'as-link', attributes: { title: 'Click to open link' } });
 
 const headingDecos: Record<number, Decoration> = {
   1: Decoration.mark({ class: 'as-h1' }),

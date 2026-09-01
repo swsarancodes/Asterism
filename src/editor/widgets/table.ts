@@ -9,19 +9,43 @@ export interface ParsedTable {
   rows: string[][];
 }
 
+/**
+ * Splits a markdown table row by pipes while respecting escaped pipes and inline code spans.
+ */
+export function splitTableRow(line: string): string[] {
+  let clean = line.trim();
+  if (clean.startsWith('|')) clean = clean.slice(1);
+  if (clean.endsWith('|')) clean = clean.slice(0, -1);
+
+  const cells: string[] = [];
+  let current = '';
+  let inCode = false;
+
+  for (let i = 0; i < clean.length; i++) {
+    const ch = clean[i];
+    if (ch === '`') {
+      inCode = !inCode;
+      current += ch;
+    } else if (ch === '\\' && i + 1 < clean.length && clean[i + 1] === '|') {
+      current += '\\|';
+      i++;
+    } else if (ch === '|' && !inCode) {
+      cells.push(current.trim());
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  cells.push(current.trim());
+  return cells;
+}
+
 export function parseMarkdownTable(source: string): ParsedTable | null {
   const lines = source.trim().split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
   if (lines.length < 2) return null;
 
-  const parseRow = (line: string): string[] => {
-    let clean = line;
-    if (clean.startsWith('|')) clean = clean.slice(1);
-    if (clean.endsWith('|')) clean = clean.slice(0, -1);
-    return clean.split('|').map((c) => c.trim());
-  };
-
-  const headers = parseRow(lines[0]);
-  const alignRow = parseRow(lines[1]);
+  const headers = splitTableRow(lines[0]);
+  const alignRow = splitTableRow(lines[1]);
   if (headers.length === 0 || alignRow.length === 0) return null;
 
   const alignments: ColumnAlign[] = alignRow.map((a) => {
@@ -32,15 +56,18 @@ export function parseMarkdownTable(source: string): ParsedTable | null {
     return 'left';
   });
 
+  // Ensure alignments array matches headers length
+  while (alignments.length < headers.length) alignments.push('left');
+
   const rows: string[][] = [];
   for (let i = 2; i < lines.length; i++) {
-    const cells = parseRow(lines[i]);
+    const cells = splitTableRow(lines[i]);
     // Normalize row length to match headers
     while (cells.length < headers.length) cells.push('');
     rows.push(cells.slice(0, headers.length));
   }
 
-  return { headers, alignments, rows };
+  return { headers, alignments: alignments.slice(0, headers.length), rows };
 }
 
 export function serializeMarkdownTable(table: ParsedTable): string {
@@ -97,83 +124,249 @@ export function serializeMarkdownTable(table: ParsedTable): string {
   return [headerStr, delimiterStr, ...rowStrs].join('\n');
 }
 
+interface TableWidgetState {
+  widget: TableWidget;
+  mode: 'visual' | 'split' | 'code';
+  onDocUpdate: (newSource: string) => void;
+}
+
 export class TableWidget extends MarkdownWidget {
+  updateDOM(dom: HTMLElement, _view: EditorView): boolean {
+    const state = (dom as any).__tableState as TableWidgetState | undefined;
+    if (state) {
+      state.widget = this;
+      state.onDocUpdate(this.source);
+      return true;
+    }
+    return false;
+  }
+
   toDOM(view: EditorView): HTMLElement {
-    const parsed = parseMarkdownTable(this.source);
     const container = document.createElement('div');
     container.className = 'as-table-container';
 
-    if (!parsed) {
-      // If table cannot be parsed, fallback to plain text container
-      const pre = document.createElement('pre');
-      pre.textContent = this.source;
-      container.appendChild(pre);
-      return container;
-    }
+    let currentMode: 'visual' | 'split' | 'code' = 'visual';
+    let currentSource = this.source;
+    let parsed = parseMarkdownTable(currentSource);
 
-    // Top action bar
+    // 1. Toolbar Header
     const bar = document.createElement('div');
     bar.className = 'as-table-toolbar';
+
+    const left = document.createElement('div');
+    left.className = 'as-table-badge-group';
+    left.style.display = 'flex';
+    left.style.alignItems = 'center';
+    left.style.gap = '8px';
 
     const titleBadge = document.createElement('span');
     titleBadge.className = 'as-table-badge';
     titleBadge.textContent = 'Table';
-    bar.appendChild(titleBadge);
+    left.appendChild(titleBadge);
+
+    // Mode Buttons: Visual | Split | Code
+    const modeBtnGroup = document.createElement('div');
+    modeBtnGroup.className = 'as-widget-btn-group';
+
+    const visualBtn = document.createElement('button');
+    visualBtn.className = 'as-widget-btn as-widget-btn-active';
+    visualBtn.textContent = 'Visual';
+
+    const splitBtn = document.createElement('button');
+    splitBtn.className = 'as-widget-btn';
+    splitBtn.textContent = 'Split';
+
+    const codeBtn = document.createElement('button');
+    codeBtn.className = 'as-widget-btn';
+    codeBtn.textContent = 'Code';
+
+    modeBtnGroup.appendChild(visualBtn);
+    modeBtnGroup.appendChild(splitBtn);
+    modeBtnGroup.appendChild(codeBtn);
+    left.appendChild(modeBtnGroup);
+    bar.appendChild(left);
 
     const actions = document.createElement('div');
     actions.className = 'as-table-actions';
 
+    // Row / Col manipulation buttons
     const addRowBtn = document.createElement('button');
     addRowBtn.textContent = '+ Row';
     addRowBtn.className = 'as-widget-btn';
+    addRowBtn.title = 'Add a new row at bottom';
     addRowBtn.onclick = (e) => {
       e.stopPropagation();
+      if (!parsed) return;
       const updated: ParsedTable = {
         ...parsed,
         rows: [...parsed.rows, new Array(parsed.headers.length).fill('')],
       };
-      this.replace(view, serializeMarkdownTable(updated));
+      parsed = updated;
+      const serialized = serializeMarkdownTable(updated);
+      currentSource = serialized;
+      textarea.value = serialized;
+      renderVisualTable();
+      this.replace(view, serialized, container);
     };
     actions.appendChild(addRowBtn);
 
     const addColBtn = document.createElement('button');
     addColBtn.textContent = '+ Col';
     addColBtn.className = 'as-widget-btn';
+    addColBtn.title = 'Add a new column at right';
     addColBtn.onclick = (e) => {
       e.stopPropagation();
+      if (!parsed) return;
       const updated: ParsedTable = {
         headers: [...parsed.headers, `Col ${parsed.headers.length + 1}`],
         alignments: [...parsed.alignments, 'left'],
         rows: parsed.rows.map((r) => [...r, '']),
       };
-      this.replace(view, serializeMarkdownTable(updated));
+      parsed = updated;
+      const serialized = serializeMarkdownTable(updated);
+      currentSource = serialized;
+      textarea.value = serialized;
+      renderVisualTable();
+      this.replace(view, serialized, container);
     };
     actions.appendChild(addColBtn);
 
-    const editRawBtn = document.createElement('button');
-    editRawBtn.textContent = 'Edit Source';
-    editRawBtn.className = 'as-widget-btn as-widget-btn-subtle';
-    editRawBtn.onclick = (e) => {
+    const removeRowBtn = document.createElement('button');
+    removeRowBtn.textContent = '- Row';
+    removeRowBtn.className = 'as-widget-btn as-widget-btn-subtle';
+    removeRowBtn.title = 'Remove the bottom row';
+    removeRowBtn.onclick = (e) => {
       e.stopPropagation();
+      if (!parsed || parsed.rows.length <= 1) return;
+      const updated: ParsedTable = {
+        ...parsed,
+        rows: parsed.rows.slice(0, -1),
+      };
+      parsed = updated;
+      const serialized = serializeMarkdownTable(updated);
+      currentSource = serialized;
+      textarea.value = serialized;
+      renderVisualTable();
+      this.replace(view, serialized, container);
+    };
+    actions.appendChild(removeRowBtn);
+
+    const formatBtn = document.createElement('button');
+    formatBtn.textContent = 'Format';
+    formatBtn.className = 'as-widget-btn as-widget-btn-subtle';
+    formatBtn.title = 'Beautify and align table markdown columns';
+    formatBtn.onclick = (e) => {
+      e.stopPropagation();
+      const currentParsed = parseMarkdownTable(textarea.value) || parsed;
+      if (currentParsed) {
+        const formatted = serializeMarkdownTable(currentParsed);
+        textarea.value = formatted;
+        currentSource = formatted;
+        parsed = currentParsed;
+        renderVisualTable();
+        this.replace(view, formatted, container);
+      }
+    };
+    actions.appendChild(formatBtn);
+
+    const copyBtn = document.createElement('button');
+    copyBtn.textContent = 'Copy';
+    copyBtn.className = 'as-widget-btn as-widget-btn-subtle';
+    copyBtn.title = 'Copy table Markdown to clipboard';
+    copyBtn.onclick = (e) => {
+      e.stopPropagation();
+      navigator.clipboard.writeText(currentSource);
+      copyBtn.textContent = 'Copied!';
+      setTimeout(() => {
+        copyBtn.textContent = 'Copy';
+      }, 1500);
+    };
+    actions.appendChild(copyBtn);
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.textContent = 'Delete';
+    deleteBtn.className = 'as-widget-btn as-widget-btn-danger';
+    deleteBtn.title = 'Delete Table';
+    deleteBtn.onclick = (e) => {
+      e.stopPropagation();
+      const range = this.resolveRange(view, container);
       view.dispatch({
-        selection: { anchor: this.from, head: this.from },
-        scrollIntoView: true,
+        changes: { from: range.from, to: range.to, insert: '' },
       });
       view.focus();
     };
-    actions.appendChild(editRawBtn);
+    actions.appendChild(deleteBtn);
 
     bar.appendChild(actions);
     container.appendChild(bar);
 
-    // Render HTML Table
-    const tableEl = document.createElement('table');
-    tableEl.className = 'as-table';
+    // 2. Main Content Wrapper (Supports Visual, Split, or Code)
+    const contentWrapper = document.createElement('div');
+    contentWrapper.className = 'as-table-content-wrapper';
+
+    // Code Editor Wrapper
+    const editorWrapper = document.createElement('div');
+    editorWrapper.className = 'as-table-editor-wrapper';
+    editorWrapper.style.display = 'none';
+
+    const textarea = document.createElement('textarea');
+    textarea.className = 'as-table-textarea';
+    textarea.value = currentSource;
+    textarea.spellcheck = false;
+    textarea.placeholder = '| Header 1 | Header 2 |\n| --- | --- |\n| Cell 1 | Cell 2 |';
+
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+    textarea.addEventListener('input', (e) => {
+      e.stopPropagation();
+      const rawText = textarea.value;
+      currentSource = rawText;
+
+      // Update parsed visual preview in real-time if in Split mode
+      const maybeParsed = parseMarkdownTable(rawText);
+      if (maybeParsed) {
+        parsed = maybeParsed;
+        renderVisualTable();
+      }
+
+      // Debounced writeback to CodeMirror buffer
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        this.replace(view, rawText, container);
+      }, 350);
+    });
+
+    textarea.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        textarea.value = textarea.value.substring(0, start) + '  ' + textarea.value.substring(end);
+        textarea.selectionStart = textarea.selectionEnd = start + 2;
+        textarea.dispatchEvent(new Event('input'));
+      } else if (e.key === 'Escape') {
+        currentMode = 'visual';
+        stateObj.mode = 'visual';
+        updateModeUI();
+        view.focus();
+      }
+    });
+
+    editorWrapper.appendChild(textarea);
+    contentWrapper.appendChild(editorWrapper);
+
+    // Visual Table Area
+    const visualWrapper = document.createElement('div');
+    visualWrapper.className = 'as-table-visual-wrapper';
+    contentWrapper.appendChild(visualWrapper);
+
+    container.appendChild(contentWrapper);
 
     // Cell keyboard navigation helper
     const navigateCells = (currentEl: HTMLElement, shift: boolean, onLastTab?: () => void) => {
       const allCells = Array.from(
-        tableEl.querySelectorAll<HTMLElement>('th[contenteditable="true"], td[contenteditable="true"]')
+        visualWrapper.querySelectorAll<HTMLElement>('th[contenteditable="true"], td[contenteditable="true"]')
       );
       const idx = allCells.indexOf(currentEl);
       if (idx === -1) return;
@@ -191,94 +384,220 @@ export class TableWidget extends MarkdownWidget {
       }
     };
 
-    // Thead
-    const thead = document.createElement('thead');
-    const headerTr = document.createElement('tr');
-    parsed.headers.forEach((h, colIdx) => {
-      const th = document.createElement('th');
-      th.style.textAlign = parsed.alignments[colIdx];
-      th.contentEditable = 'true';
-      th.spellcheck = false;
-      th.textContent = h;
+    // Render HTML Table DOM from parsed structure
+    const renderVisualTable = () => {
+      visualWrapper.innerHTML = '';
 
-      th.onblur = () => {
-        const newText = th.textContent || '';
-        if (newText !== parsed.headers[colIdx]) {
-          const nextHeaders = [...parsed.headers];
-          nextHeaders[colIdx] = newText;
-          const updated = { ...parsed, headers: nextHeaders };
-          this.replace(view, serializeMarkdownTable(updated));
-        }
-      };
+      if (!parsed) {
+        const errorBox = document.createElement('div');
+        errorBox.className = 'as-table-fallback-note';
+        errorBox.innerHTML = `
+          <div style="padding: 16px; color: var(--as-text-muted); font-size: 13px;">
+            Markdown table cannot be parsed. Switch to <strong>Code</strong> mode to edit raw syntax.
+          </div>
+        `;
+        visualWrapper.appendChild(errorBox);
+        return;
+      }
 
-      th.onkeydown = (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          th.blur();
-        } else if (e.key === 'Tab') {
-          e.preventDefault();
-          e.stopPropagation();
-          th.blur();
-          navigateCells(th, e.shiftKey);
-        }
-      };
+      const tableEl = document.createElement('table');
+      tableEl.className = 'as-table';
 
-      headerTr.appendChild(th);
-    });
-    thead.appendChild(headerTr);
-    tableEl.appendChild(thead);
+      // Header
+      const thead = document.createElement('thead');
+      const headerTr = document.createElement('tr');
+      parsed.headers.forEach((h, colIdx) => {
+        const th = document.createElement('th');
+        th.style.textAlign = parsed?.alignments[colIdx] || 'left';
+        th.contentEditable = 'true';
+        th.spellcheck = false;
+        th.textContent = h;
 
-    // Tbody
-    const tbody = document.createElement('tbody');
-    parsed.rows.forEach((row, rowIdx) => {
-      const tr = document.createElement('tr');
-      row.forEach((cell, colIdx) => {
-        const td = document.createElement('td');
-        td.style.textAlign = parsed.alignments[colIdx];
-        td.contentEditable = 'true';
-        td.spellcheck = false;
-        td.textContent = cell;
-
-        td.onblur = () => {
-          const newText = td.textContent || '';
-          if (newText !== parsed.rows[rowIdx][colIdx]) {
-            const nextRows = parsed.rows.map((r, rI) =>
-              rI === rowIdx
-                ? r.map((c, cI) => (cI === colIdx ? newText : c))
-                : [...r]
-            );
-            const updated = { ...parsed, rows: nextRows };
-            this.replace(view, serializeMarkdownTable(updated));
+        th.onblur = () => {
+          if (!parsed) return;
+          const newText = th.textContent || '';
+          if (newText !== parsed.headers[colIdx]) {
+            const nextHeaders = [...parsed.headers];
+            nextHeaders[colIdx] = newText;
+            parsed = { ...parsed, headers: nextHeaders };
+            const serialized = serializeMarkdownTable(parsed);
+            currentSource = serialized;
+            textarea.value = serialized;
+            this.replace(view, serialized, container);
           }
         };
 
-        td.onkeydown = (e) => {
-          if (e.key === 'Enter' && !e.shiftKey) {
+        th.onkeydown = (e) => {
+          if (e.key === 'Enter') {
             e.preventDefault();
-            td.blur();
+            // Move focus to first row cell in this column
+            const targetTd = visualWrapper.querySelector<HTMLElement>(
+              `tbody tr:first-child td:nth-child(${colIdx + 1})`
+            );
+            if (targetTd) targetTd.focus();
+            else th.blur();
           } else if (e.key === 'Tab') {
             e.preventDefault();
             e.stopPropagation();
-            td.blur();
-            const isLastCell = rowIdx === parsed.rows.length - 1 && colIdx === row.length - 1;
-            if (!e.shiftKey && isLastCell) {
-              const updated: ParsedTable = {
-                ...parsed,
-                rows: [...parsed.rows, new Array(parsed.headers.length).fill('')],
-              };
-              this.replace(view, serializeMarkdownTable(updated));
-            } else {
-              navigateCells(td, e.shiftKey);
-            }
+            navigateCells(th, e.shiftKey);
           }
         };
 
-        tr.appendChild(td);
+        headerTr.appendChild(th);
       });
-      tbody.appendChild(tr);
-    });
-    tableEl.appendChild(tbody);
-    container.appendChild(tableEl);
+      thead.appendChild(headerTr);
+      tableEl.appendChild(thead);
+
+      // Body
+      const tbody = document.createElement('tbody');
+      parsed.rows.forEach((row, rowIdx) => {
+        const tr = document.createElement('tr');
+        row.forEach((cell, colIdx) => {
+          const td = document.createElement('td');
+          td.style.textAlign = parsed?.alignments[colIdx] || 'left';
+          td.contentEditable = 'true';
+          td.spellcheck = false;
+          td.textContent = cell;
+
+          td.onblur = () => {
+            if (!parsed) return;
+            const newText = td.textContent || '';
+            if (newText !== parsed.rows[rowIdx][colIdx]) {
+              const nextRows = parsed.rows.map((r, rI) =>
+                rI === rowIdx ? r.map((c, cI) => (cI === colIdx ? newText : c)) : [...r]
+              );
+              parsed = { ...parsed, rows: nextRows };
+              const serialized = serializeMarkdownTable(parsed);
+              currentSource = serialized;
+              textarea.value = serialized;
+              this.replace(view, serialized, container);
+            }
+          };
+
+          td.onkeydown = (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              // Move to next row in same column if available
+              const nextRowTd = visualWrapper.querySelector<HTMLElement>(
+                `tbody tr:nth-child(${rowIdx + 2}) td:nth-child(${colIdx + 1})`
+              );
+              if (nextRowTd) {
+                nextRowTd.focus();
+              } else {
+                td.blur();
+              }
+            } else if (e.key === 'Tab') {
+              e.preventDefault();
+              e.stopPropagation();
+              const isLastCell = !parsed || (rowIdx === parsed.rows.length - 1 && colIdx === row.length - 1);
+              if (!e.shiftKey && isLastCell && parsed) {
+                // Tab at end appends row and moves focus to first cell of new row
+                const updated: ParsedTable = {
+                  ...parsed,
+                  rows: [...parsed.rows, new Array(parsed.headers.length).fill('')],
+                };
+                parsed = updated;
+                const serialized = serializeMarkdownTable(updated);
+                currentSource = serialized;
+                textarea.value = serialized;
+                this.replace(view, serialized, container);
+                renderVisualTable();
+                setTimeout(() => {
+                  const newFirstCell = visualWrapper.querySelector<HTMLElement>('tbody tr:last-child td:first-child');
+                  newFirstCell?.focus();
+                }, 20);
+              } else {
+                navigateCells(td, e.shiftKey);
+              }
+            }
+          };
+
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      tableEl.appendChild(tbody);
+      visualWrapper.appendChild(tableEl);
+    };
+
+    // Update Mode UI
+    const updateModeUI = () => {
+      container.dataset.mode = currentMode;
+      visualBtn.className = currentMode === 'visual' ? 'as-widget-btn as-widget-btn-active' : 'as-widget-btn';
+      splitBtn.className = currentMode === 'split' ? 'as-widget-btn as-widget-btn-active' : 'as-widget-btn';
+      codeBtn.className = currentMode === 'code' ? 'as-widget-btn as-widget-btn-active' : 'as-widget-btn';
+
+      if (currentMode === 'visual') {
+        editorWrapper.style.display = 'none';
+        visualWrapper.style.display = 'block';
+        contentWrapper.className = 'as-table-content-wrapper';
+        // Parse from currentSource and update visual table
+        parsed = parseMarkdownTable(currentSource);
+        renderVisualTable();
+      } else if (currentMode === 'code') {
+        editorWrapper.style.display = 'flex';
+        visualWrapper.style.display = 'none';
+        contentWrapper.className = 'as-table-content-wrapper';
+        textarea.value = currentSource;
+        setTimeout(() => textarea.focus(), 50);
+      } else if (currentMode === 'split') {
+        editorWrapper.style.display = 'flex';
+        visualWrapper.style.display = 'block';
+        contentWrapper.className = 'as-table-content-wrapper as-table-split';
+        textarea.value = currentSource;
+        parsed = parseMarkdownTable(currentSource);
+        renderVisualTable();
+        setTimeout(() => textarea.focus(), 50);
+      }
+    };
+
+    visualBtn.onclick = (e) => {
+      e.stopPropagation();
+      currentMode = 'visual';
+      stateObj.mode = 'visual';
+      updateModeUI();
+    };
+
+    splitBtn.onclick = (e) => {
+      e.stopPropagation();
+      currentMode = 'split';
+      stateObj.mode = 'split';
+      updateModeUI();
+    };
+
+    codeBtn.onclick = (e) => {
+      e.stopPropagation();
+      currentMode = 'code';
+      stateObj.mode = 'code';
+      updateModeUI();
+    };
+
+    // State object attached to container to support updateDOM
+    const stateObj: TableWidgetState = {
+      widget: this,
+      mode: currentMode,
+      onDocUpdate: (newSource: string) => {
+        if (newSource !== currentSource) {
+          currentSource = newSource;
+          if (document.activeElement !== textarea && textarea.value !== currentSource) {
+            textarea.value = currentSource;
+          }
+          const nextParsed = parseMarkdownTable(newSource);
+          if (nextParsed) {
+            parsed = nextParsed;
+            // Only re-render visual table if user is not typing in a cell
+            const activeIsCell = visualWrapper.contains(document.activeElement);
+            if (!activeIsCell) {
+              renderVisualTable();
+            }
+          }
+        }
+      },
+    };
+    (container as any).__tableState = stateObj;
+
+    // Initial render
+    renderVisualTable();
 
     return container;
   }
