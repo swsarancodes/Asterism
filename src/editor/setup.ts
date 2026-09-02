@@ -95,6 +95,109 @@ export function findLinkUrlAt(view: EditorView, pos: number, _targetEl?: HTMLEle
 }
 
 /**
+ * Image Paste & Drop Handler:
+ * When user pastes an image from clipboard (Cmd+V, screenshot, copied image file)
+ * or drops an image file onto the editor, converts to base64 Data URL and inserts ![Image](dataUrl).
+ */
+export function imagePasteDropExtension(): Extension {
+  const insertImageAt = (view: EditorView, pos: number, alt: string, url: string) => {
+    const doc = view.state.doc;
+    const line = doc.lineAt(pos);
+    const needLeadingNewline = pos > line.from && !doc.sliceString(pos - 1, pos).endsWith('\n');
+    const imageMarkdown = `${needLeadingNewline ? '\n' : ''}![${alt}](${url})\n`;
+    view.dispatch({
+      changes: { from: pos, insert: imageMarkdown },
+      selection: { anchor: pos + imageMarkdown.length },
+    });
+  };
+
+  const handleImageFile = (file: File, view: EditorView, pos: number) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const cleanName = file.name ? file.name.replace(/\.[^/.]+$/, '') : 'Image';
+      insertImageAt(view, pos, cleanName, dataUrl);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  return EditorView.domEventHandlers({
+    paste(e, view) {
+      // 1. Check for image items in clipboard (e.g. screenshot, copied image in browser)
+      const items = e.clipboardData?.items;
+      if (items) {
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          if (item.type.startsWith('image/')) {
+            const file = item.getAsFile();
+            if (file) {
+              e.preventDefault();
+              e.stopPropagation();
+              const pos = view.state.selection.main.from;
+              handleImageFile(file, view, pos);
+              return true;
+            }
+          }
+        }
+      }
+
+      // 2. Check for image files in clipboard
+      const files = e.clipboardData?.files;
+      if (files && files.length > 0) {
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          if (file.type.startsWith('image/')) {
+            e.preventDefault();
+            e.stopPropagation();
+            const pos = view.state.selection.main.from;
+            handleImageFile(file, view, pos);
+            return true;
+          }
+        }
+      }
+
+      // 3. Check if clipboard text is an image URL (e.g. https://.../picture.png or data:image/...)
+      const text = e.clipboardData?.getData('text/plain')?.trim();
+      if (text) {
+        const isImageUrl =
+          /^https?:\/\/[^\s]+?\.(png|jpg|jpeg|gif|webp|svg)(\?[^\s]*)?$/i.test(text) ||
+          /^data:image\/[a-zA-Z+]+;base64,/i.test(text);
+        const sel = view.state.selection.main;
+        if (isImageUrl && sel.empty) {
+          const line = view.state.doc.lineAt(sel.from);
+          if (line.text.trim() === '') {
+            e.preventDefault();
+            e.stopPropagation();
+            insertImageAt(view, sel.from, 'Image', text);
+            return true;
+          }
+        }
+      }
+
+      return false;
+    },
+
+    drop(e, view) {
+      const files = e.dataTransfer?.files;
+      if (files && files.length > 0) {
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          if (file.type.startsWith('image/')) {
+            e.preventDefault();
+            e.stopPropagation();
+            const dropPos = view.posAtCoords({ x: e.clientX, y: e.clientY });
+            const pos = dropPos !== null ? dropPos : view.state.selection.main.from;
+            handleImageFile(file, view, pos);
+            return true;
+          }
+        }
+      }
+      return false;
+    },
+  });
+}
+
+/**
  * Smart Auto-Linking:
  * When user selects text and pastes a URL, automatically wraps the text into [selected text](url).
  */
@@ -181,6 +284,7 @@ export function createEditorExtensions(options: EditorSetupOptions = {}): Extens
     createMarkdownExtension(),
     ...getModeExtensions(mode),
     delimiterGuard(),
+    imagePasteDropExtension(),
     smartPasteLinkExtension(),
     clickLinkExtension(),
     updateListener,

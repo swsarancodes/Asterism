@@ -5,8 +5,8 @@ import { TableWidget } from './table';
 import { MermaidWidget } from './mermaid';
 import { CodeBlockWidget } from './code-block';
 import { CalloutWidget } from './callout';
-import { TaskCheckboxWidget } from './checkbox';
 import { HRWidget } from './hr';
+import { ImageWidget } from './image';
 
 export function buildBlockWidgets(state: EditorState): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
@@ -71,19 +71,7 @@ export function buildBlockWidgets(state: EditorState): DecorationSet {
         return false;
       }
 
-      // 4. Task Markers: [ ] and [x]
-      else if (name === 'TaskMarker') {
-        const markerText = doc.sliceString(nodeFrom, nodeTo);
-        const isChecked = markerText.includes('x') || markerText.includes('X');
-        const widget = new TaskCheckboxWidget(isChecked, nodeFrom, nodeTo);
-        decos.push({
-          from: nodeFrom,
-          to: nodeTo,
-          deco: Decoration.replace({ widget }),
-        });
-      }
-
-      // 5. Horizontal Rules
+      // 4. Horizontal Rules
       else if (name === 'HorizontalRule') {
         const widget = new HRWidget();
         decos.push({
@@ -91,6 +79,18 @@ export function buildBlockWidgets(state: EditorState): DecorationSet {
           to: nodeTo,
           deco: Decoration.replace({ widget, block: true }),
         });
+      }
+
+      // 6. Image Widget: ![alt](url)
+      else if (name === 'Image') {
+        const imageText = doc.sliceString(nodeFrom, nodeTo);
+        const widget = new ImageWidget(imageText, nodeFrom, nodeTo);
+        decos.push({
+          from: nodeFrom,
+          to: nodeTo,
+          deco: Decoration.replace({ widget }),
+        });
+        return false;
       }
     },
   });

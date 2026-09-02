@@ -4,10 +4,20 @@ import { TableWidget, parseMarkdownTable, serializeMarkdownTable } from '../src/
 import { MermaidWidget } from '../src/editor/widgets/mermaid';
 import { CodeBlockWidget } from '../src/editor/widgets/code-block';
 import { CalloutWidget } from '../src/editor/widgets/callout';
+import { ImageWidget, parseImageMarkdown, serializeImageMarkdown } from '../src/editor/widgets/image';
 import { EditorState, EditorSelection } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { wrapWithLink, removeLink, insertLinkTemplate } from '../src/editor/commands/formatting';
-import { findLinkUrlAt } from '../src/editor/setup';
+import {
+  wrapWithLink,
+  removeLink,
+  insertLinkTemplate,
+  setTaskList,
+  setBulletList,
+  setNumberedList,
+  setHeadingLevel,
+  markdownFormattingKeymap,
+} from '../src/editor/commands/formatting';
+import { findLinkUrlAt, imagePasteDropExtension } from '../src/editor/setup';
 
 beforeAll(() => {
   const window = new GlobalWindow();
@@ -232,3 +242,138 @@ describe('Link Attachment Commands & Normalization', () => {
     expect(notFound).toBeNull();
   });
 });
+
+describe('ImageWidget & Image Paste Support', () => {
+  test('parseImageMarkdown extracts alt and url accurately', () => {
+    const parsed1 = parseImageMarkdown('![Screenshot](https://example.com/pic.png)');
+    expect(parsed1).not.toBeNull();
+    expect(parsed1?.alt).toBe('Screenshot');
+    expect(parsed1?.url).toBe('https://example.com/pic.png');
+
+    const parsed2 = parseImageMarkdown('![Diagram](data:image/png;base64,iVBORw0KGgo "My Title")');
+    expect(parsed2).not.toBeNull();
+    expect(parsed2?.alt).toBe('Diagram');
+    expect(parsed2?.url).toBe('data:image/png;base64,iVBORw0KGgo');
+    expect(parsed2?.title).toBe('My Title');
+
+    const invalid = parseImageMarkdown('not an image markdown');
+    expect(invalid).toBeNull();
+  });
+
+  test('serializeImageMarkdown formats image markdown correctly', () => {
+    expect(serializeImageMarkdown('Architecture', 'https://example.com/arch.svg')).toBe(
+      '![Architecture](https://example.com/arch.svg)'
+    );
+    expect(serializeImageMarkdown('Flow', 'https://example.com/flow.png', 'Flowchart')).toBe(
+      '![Flow](https://example.com/flow.png "Flowchart")'
+    );
+  });
+
+  test('ImageWidget creates DOM element with img, caption, and hover actions', () => {
+    const source = '![Banner](https://example.com/banner.png)';
+    const widget = new ImageWidget(source, 0, source.length);
+
+    const state = EditorState.create({ doc: source });
+    const view = new EditorView({ state });
+
+    const dom = widget.toDOM(view);
+    expect(dom).not.toBeNull();
+    expect(dom.className).toBe('as-image-widget');
+
+    const img = dom.querySelector('img');
+    expect(img).not.toBeNull();
+    expect(img?.src).toBe('https://example.com/banner.png');
+    expect(img?.alt).toBe('Banner');
+
+    const caption = dom.querySelector('.as-image-caption');
+    expect(caption).not.toBeNull();
+    expect(caption?.textContent).toBe('Banner');
+
+    // Check action buttons exist
+    const actionBar = dom.querySelector('.as-image-actions');
+    expect(actionBar).not.toBeNull();
+    const buttons = actionBar?.querySelectorAll('button');
+    expect(buttons?.length).toBe(3); // Copy URL, Edit, Delete
+
+    // Test updateDOM preserves node
+    expect(widget.updateDOM(dom)).toBe(true);
+  });
+
+  test('imagePasteDropExtension registers without errors', () => {
+    const ext = imagePasteDropExtension();
+    expect(ext).toBeDefined();
+
+    const state = EditorState.create({
+      doc: 'Start\n\nEnd',
+      extensions: [ext],
+    });
+    const view = new EditorView({ state });
+    expect(view).toBeDefined();
+  });
+});
+
+describe('Task List & Empty Line List Formatting', () => {
+  test('setTaskList on empty line creates empty todo item with cursor at end', () => {
+    const state = EditorState.create({ doc: '' });
+    const view = new EditorView({ state });
+
+    setTaskList(view);
+    expect(view.state.doc.toString()).toBe('- [ ] ');
+    expect(view.state.selection.main.anchor).toBe(6);
+  });
+
+  test('setBulletList and setNumberedList on empty line create list items with cursor at end', () => {
+    const state1 = EditorState.create({ doc: '' });
+    const view1 = new EditorView({ state1 });
+    setBulletList(view1);
+    expect(view1.state.doc.toString()).toBe('- ');
+    expect(view1.state.selection.main.anchor).toBe(2);
+
+    const state2 = EditorState.create({ doc: '' });
+    const view2 = new EditorView({ state2 });
+    setNumberedList(view2);
+    expect(view2.state.doc.toString()).toBe('1. ');
+    expect(view2.state.selection.main.anchor).toBe(3);
+  });
+
+  test('setHeadingLevel on empty line inserts heading prefix with cursor at end', () => {
+    const state = EditorState.create({ doc: '' });
+    const view = new EditorView({ state });
+
+    setHeadingLevel(view, 2);
+    expect(view.state.doc.toString()).toBe('## ');
+    expect(view.state.selection.main.anchor).toBe(3);
+  });
+
+  test('Enter on task item continues list; Enter on empty task item exits list', () => {
+    const enterCmd = markdownFormattingKeymap.find((k) => k.key === 'Enter');
+    expect(enterCmd).toBeDefined();
+
+    // 1. Enter on non-empty task item continues
+    const state1 = EditorState.create({ doc: '- [ ] Buy milk' });
+    const view1 = new EditorView({ state: state1 });
+    view1.dispatch({ selection: { anchor: 14, head: 14 } });
+    enterCmd?.run(view1);
+    expect(view1.state.doc.toString()).toBe('- [ ] Buy milk\n- [ ] ');
+
+    // 2. Enter on empty task item exits
+    const state2 = EditorState.create({ doc: '- [ ] ' });
+    const view2 = new EditorView({ state: state2 });
+    view2.dispatch({ selection: { anchor: 6, head: 6 } });
+    enterCmd?.run(view2);
+    expect(view2.state.doc.toString()).toBe('');
+  });
+
+  test('Backspace on empty task item clears it', () => {
+    const backspaceCmd = markdownFormattingKeymap.find((k) => k.key === 'Backspace');
+    expect(backspaceCmd).toBeDefined();
+
+    const state = EditorState.create({ doc: '- [ ] ' });
+    const view = new EditorView({ state });
+    view.dispatch({ selection: { anchor: 6, head: 6 } });
+    backspaceCmd?.run(view);
+    expect(view.state.doc.toString()).toBe('');
+  });
+});
+
+

@@ -17,6 +17,10 @@ import {
   Type,
   Link as LinkIcon,
   FilePlus,
+  Bold,
+  Italic,
+  Strikethrough,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { useWorkspaceStore } from '../stores/workspace';
 import { formatDisplayName } from '../../core/document/file-meta';
@@ -72,10 +76,7 @@ export const SlashCommandMenu: React.FC<SlashMenuProps> = ({
       description: 'Plain body text without formatting',
       category: 'Basic',
       icon: Type,
-      action: (v, r) => {
-        v.dispatch({ changes: { from: r.from, to: r.to, insert: '' } });
-        setHeadingLevel(v, 0);
-      },
+      action: (v, r) => setHeadingLevel(v, 0, r),
     },
     {
       id: 'h1',
@@ -83,10 +84,7 @@ export const SlashCommandMenu: React.FC<SlashMenuProps> = ({
       description: 'Large section heading',
       category: 'Basic',
       icon: Heading1,
-      action: (v, r) => {
-        v.dispatch({ changes: { from: r.from, to: r.to, insert: '' } });
-        setHeadingLevel(v, 1);
-      },
+      action: (v, r) => setHeadingLevel(v, 1, r),
     },
     {
       id: 'h2',
@@ -94,10 +92,7 @@ export const SlashCommandMenu: React.FC<SlashMenuProps> = ({
       description: 'Medium section heading',
       category: 'Basic',
       icon: Heading2,
-      action: (v, r) => {
-        v.dispatch({ changes: { from: r.from, to: r.to, insert: '' } });
-        setHeadingLevel(v, 2);
-      },
+      action: (v, r) => setHeadingLevel(v, 2, r),
     },
     {
       id: 'h3',
@@ -105,10 +100,7 @@ export const SlashCommandMenu: React.FC<SlashMenuProps> = ({
       description: 'Small subsection heading',
       category: 'Basic',
       icon: Heading3,
-      action: (v, r) => {
-        v.dispatch({ changes: { from: r.from, to: r.to, insert: '' } });
-        setHeadingLevel(v, 3);
-      },
+      action: (v, r) => setHeadingLevel(v, 3, r),
     },
     {
       id: 'bullet-list',
@@ -116,10 +108,7 @@ export const SlashCommandMenu: React.FC<SlashMenuProps> = ({
       description: 'Create a simple bulleted list',
       category: 'Basic',
       icon: List,
-      action: (v, r) => {
-        v.dispatch({ changes: { from: r.from, to: r.to, insert: '' } });
-        setBulletList(v);
-      },
+      action: (v, r) => setBulletList(v, r),
     },
     {
       id: 'numbered-list',
@@ -127,10 +116,7 @@ export const SlashCommandMenu: React.FC<SlashMenuProps> = ({
       description: 'Create a list with numbering',
       category: 'Basic',
       icon: ListOrdered,
-      action: (v, r) => {
-        v.dispatch({ changes: { from: r.from, to: r.to, insert: '' } });
-        setNumberedList(v);
-      },
+      action: (v, r) => setNumberedList(v, r),
     },
     {
       id: 'todo-list',
@@ -138,10 +124,7 @@ export const SlashCommandMenu: React.FC<SlashMenuProps> = ({
       description: 'Track tasks with interactive checkboxes',
       category: 'Basic',
       icon: CheckSquare,
-      action: (v, r) => {
-        v.dispatch({ changes: { from: r.from, to: r.to, insert: '' } });
-        setTaskList(v);
-      },
+      action: (v, r) => setTaskList(v, r),
     },
     {
       id: 'link',
@@ -182,6 +165,77 @@ export const SlashCommandMenu: React.FC<SlashMenuProps> = ({
       category: 'Basic',
       icon: Minus,
       action: (v, r) => insertDividerTemplate(v, r),
+    },
+    {
+      id: 'bold',
+      title: 'Bold',
+      description: 'Make text bold (**bold text**)',
+      category: 'Basic',
+      icon: Bold,
+      action: (v, r) => {
+        const text = '**bold text**';
+        v.dispatch({
+          changes: { from: r.from, to: r.to, insert: text },
+          selection: { anchor: r.from + 2, head: r.from + 11 },
+        });
+      },
+    },
+    {
+      id: 'italic',
+      title: 'Italic',
+      description: 'Make text italic (*italic text*)',
+      category: 'Basic',
+      icon: Italic,
+      action: (v, r) => {
+        const text = '*italic text*';
+        v.dispatch({
+          changes: { from: r.from, to: r.to, insert: text },
+          selection: { anchor: r.from + 1, head: r.from + 12 },
+        });
+      },
+    },
+    {
+      id: 'strikethrough',
+      title: 'Strikethrough',
+      description: 'Cross out text (~~strikethrough text~~)',
+      category: 'Basic',
+      icon: Strikethrough,
+      action: (v, r) => {
+        const text = '~~strikethrough text~~';
+        v.dispatch({
+          changes: { from: r.from, to: r.to, insert: text },
+          selection: { anchor: r.from + 2, head: r.from + 20 },
+        });
+      },
+    },
+    {
+      id: 'image',
+      title: 'Image',
+      description: 'Upload or embed an image from file or URL',
+      category: 'Media & Widgets',
+      icon: ImageIcon,
+      action: (v, r) => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.onchange = (e: any) => {
+          const file = e.target?.files?.[0];
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = () => {
+              const dataUrl = reader.result as string;
+              const cleanName = file.name ? file.name.replace(/\.[^/.]+$/, '') : 'Image';
+              const imageMd = `![${cleanName}](${dataUrl})\n`;
+              v.dispatch({
+                changes: { from: r.from, to: r.to, insert: imageMd },
+                selection: { anchor: r.from + imageMd.length },
+              });
+            };
+            reader.readAsDataURL(file);
+          }
+        };
+        input.click();
+      },
     },
     {
       id: 'table',

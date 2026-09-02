@@ -8,7 +8,7 @@ import { useSettingsStore } from '../stores/settings';
 import { FloatingToolbar } from './FloatingToolbar';
 import { SlashCommandMenu } from './SlashCommandMenu';
 import { toggleInlineFormat, setHeadingLevel } from '../../editor/commands/formatting';
-import { Folder, FileText } from 'lucide-react';
+import { Folder, FileText, Plus } from 'lucide-react';
 import { formatDisplayName } from '../../core/document/file-meta';
 
 interface EditorPaneProps {
@@ -33,11 +33,21 @@ export const EditorPane: React.FC<EditorPaneProps> = ({ modeOverride }) => {
   const [floatingPos, setFloatingPos] = useState<{ top: number; left: number } | null>(null);
   const [linkRequested, setLinkRequested] = useState(false);
 
-  // Slash command menu state (on typing /)
+  // Slash command menu state (on typing / or clicking +)
   const [slashOpen, setSlashOpen] = useState(false);
   const [slashQuery, setSlashQuery] = useState('');
   const [slashPos, setSlashPos] = useState<{ top: number; left: number } | null>(null);
   const [slashRange, setSlashRange] = useState<{ from: number; to: number } | null>(null);
+
+  // Notion-style Empty Line '+' button state
+  const [emptyLinePlus, setEmptyLinePlus] = useState<{
+    top: number;
+    height: number;
+    plusLeft: number;
+    cursorX: number;
+    lineFrom: number;
+    lineTo: number;
+  } | null>(null);
 
   // Global keydown handler to ensure Cmd+B, Cmd+I, Cmd+E, Cmd+K work reliably
   useEffect(() => {
@@ -132,27 +142,18 @@ export const EditorPane: React.FC<EditorPaneProps> = ({ modeOverride }) => {
           setFloatingPos(null);
         }
 
-        // 2. Handle Notion-style Slash Command Menu Trigger
+        // Handle Notion-style '+' button on empty line
         if (sel.empty) {
           const pos = sel.from;
           const lineObj = view.state.doc.lineAt(pos);
-          const textBefore = lineObj.text.slice(0, pos - lineObj.from);
 
-          const match = textBefore.match(/(?:^|\s)\/([a-zA-Z0-9]*)$/);
-          if (match) {
-            const slashFrom = pos - match[1].length - 1;
-            const coords = view.coordsAtPos(pos);
-            if (coords) {
-              setSlashPos({
-                top: coords.bottom + 4,
-                left: coords.left,
-              });
-              setSlashQuery(match[1]);
-              setSlashRange({ from: slashFrom, to: pos });
-              setSlashOpen(true);
-              return;
-            }
+          if (effectiveMode !== 'source' && lineObj.text.trim() === '') {
+            requestAnimationFrame(() => updateEmptyPlusState());
+          } else {
+            setEmptyLinePlus(null);
           }
+        } else {
+          setEmptyLinePlus(null);
         }
         setSlashOpen(false);
       },
@@ -170,7 +171,73 @@ export const EditorPane: React.FC<EditorPaneProps> = ({ modeOverride }) => {
 
     viewRef.current = view;
 
+    // Helper to calculate exact physical line position from target DOM element
+    const updateEmptyPlusState = () => {
+      const v = viewRef.current;
+      if (!v || !containerRef.current) return;
+      const sel = v.state.selection.main;
+      if (!sel.empty) {
+        setEmptyLinePlus(null);
+        return;
+      }
+      const pos = sel.from;
+      const lineObj = v.state.doc.lineAt(pos);
+      if (effectiveMode === 'source' || lineObj.text.trim() !== '') {
+        setEmptyLinePlus(null);
+        return;
+      }
+
+      try {
+        const domRes = v.domAtPos(pos);
+        const lineEl = (domRes.node.nodeType === 1 ? domRes.node : domRes.node.parentElement) as HTMLElement | null;
+        const targetLine = lineEl?.classList.contains('cm-line') ? lineEl : lineEl?.closest('.cm-line');
+
+        if (targetLine) {
+          const lineRect = targetLine.getBoundingClientRect();
+          const containerRect = containerRef.current.getBoundingClientRect();
+
+          if (lineRect.height > 0 && lineRect.bottom >= containerRect.top && lineRect.top <= containerRect.bottom) {
+            const lineX = lineRect.left - containerRect.left;
+            const lineY = lineRect.top - containerRect.top;
+            const height = lineRect.height;
+            const plusLeft = lineX - 32;
+
+            setEmptyLinePlus({
+              top: lineY,
+              height,
+              plusLeft,
+              cursorX: lineX,
+              lineFrom: lineObj.from,
+              lineTo: lineObj.to,
+            });
+            return;
+          }
+        }
+      } catch {
+        // ignore
+      }
+
+      setEmptyLinePlus(null);
+    };
+
+    // Keep emptyLinePlus correctly positioned during scroll or resize
+    const handleScroll = () => {
+      requestAnimationFrame(updateEmptyPlusState);
+    };
+
+    const handleResize = () => {
+      requestAnimationFrame(updateEmptyPlusState);
+    };
+
+    view.scrollDOM.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', handleResize);
+
+    // Initial check on mount
+    requestAnimationFrame(updateEmptyPlusState);
+
     return () => {
+      view.scrollDOM.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleResize);
       view.destroy();
       viewRef.current = null;
     };
@@ -303,6 +370,58 @@ export const EditorPane: React.FC<EditorPaneProps> = ({ modeOverride }) => {
           openLinkRequested={linkRequested}
           onLinkHandled={() => setLinkRequested(false)}
         />
+
+        {/* Notion-style Gutter '+' Button */}
+        {emptyLinePlus && !slashOpen && (
+          <button
+            type="button"
+            title="Add a block"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (!viewRef.current) return;
+              viewRef.current.dispatch({
+                selection: { anchor: emptyLinePlus.lineFrom, head: emptyLinePlus.lineFrom },
+              });
+              viewRef.current.focus();
+              setSlashPos({
+                top: emptyLinePlus.top + (emptyLinePlus.height || 24) + 4,
+                left: emptyLinePlus.cursorX,
+              });
+              setSlashQuery('');
+              setSlashRange({ from: emptyLinePlus.lineFrom, to: emptyLinePlus.lineTo });
+              setSlashOpen(true);
+            }}
+            style={{
+              position: 'absolute',
+              top: `${emptyLinePlus.top + ((emptyLinePlus.height || 24) - 22) / 2}px`,
+              left: `${emptyLinePlus.plusLeft}px`,
+              width: '22px',
+              height: '22px',
+              borderRadius: '4px',
+              border: 'none',
+              backgroundColor: 'transparent',
+              color: 'var(--as-text-dim, #999)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 0,
+              zIndex: 15,
+              transition: 'all var(--as-transition-fast, 0.15s ease)',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'var(--as-bg-hover, rgba(128,128,128,0.12))';
+              e.currentTarget.style.color = 'var(--as-text, #333)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+              e.currentTarget.style.color = 'var(--as-text-dim, #999)';
+            }}
+          >
+            <Plus size={14} />
+          </button>
+        )}
 
         {/* Notion-style Slash Command Menu (/) */}
         <SlashCommandMenu

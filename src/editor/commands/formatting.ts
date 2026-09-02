@@ -104,15 +104,31 @@ function cleanLinePrefix(text: string): string {
 /**
  * Formats all selected lines into a heading level (1, 2, 3, or 0 for paragraph)
  */
-export function setHeadingLevel(view: EditorView, level: 1 | 2 | 3 | 0) {
+export function setHeadingLevel(view: EditorView, level: 1 | 2 | 3 | 0, range?: { from: number; to: number }) {
   const { state } = view;
-  const sel = state.selection.main;
-  const startLine = state.doc.lineAt(sel.from);
-  const endLine = state.doc.lineAt(sel.to);
-  const changes: ChangeSpec[] = [];
+  const selFrom = range ? range.from : state.selection.main.from;
+  const selTo = range ? range.to : state.selection.main.to;
+  const startLine = state.doc.lineAt(selFrom);
+  const endLine = state.doc.lineAt(selTo);
 
   const prefix = level === 0 ? '' : '#'.repeat(level) + ' ';
 
+  // Single line case (empty line or single line with/without text)
+  if (startLine.number === endLine.number) {
+    const lineText = startLine.text;
+    const clean = range
+      ? cleanLinePrefix(lineText.slice(0, range.from - startLine.from) + lineText.slice(range.to - startLine.from)).trim()
+      : cleanLinePrefix(lineText);
+    const newLine = `${prefix}${clean}`;
+    view.dispatch({
+      changes: { from: startLine.from, to: startLine.to, insert: newLine },
+      selection: { anchor: startLine.from + prefix.length + clean.length },
+    });
+    view.focus();
+    return;
+  }
+
+  const changes: ChangeSpec[] = [];
   for (let l = startLine.number; l <= endLine.number; l++) {
     const line = state.doc.line(l);
     const clean = cleanLinePrefix(line.text);
@@ -128,13 +144,31 @@ export function setHeadingLevel(view: EditorView, level: 1 | 2 | 3 | 0) {
  * Formats all selected lines into a bulleted list item (- item)
  * If all selected lines are already bullet items, toggles them back to plain text.
  */
-export function setBulletList(view: EditorView) {
+export function setBulletList(view: EditorView, range?: { from: number; to: number }) {
   const { state } = view;
-  const sel = state.selection.main;
-  const startLine = state.doc.lineAt(sel.from);
-  const endLine = state.doc.lineAt(sel.to);
+  const selFrom = range ? range.from : state.selection.main.from;
+  const selTo = range ? range.to : state.selection.main.to;
+  const startLine = state.doc.lineAt(selFrom);
+  const endLine = state.doc.lineAt(selTo);
 
-  // Check if all lines are already bullet points
+  // Single line case (empty line or single line with/without text)
+  if (startLine.number === endLine.number) {
+    const lineText = startLine.text;
+    const isBullet = /^\s*-\s+(?!\[[ xX]\])/.test(lineText);
+    const clean = range
+      ? cleanLinePrefix(lineText.slice(0, range.from - startLine.from) + lineText.slice(range.to - startLine.from)).trim()
+      : cleanLinePrefix(lineText);
+
+    const newLine = isBullet && !range ? clean : `- ${clean}`;
+    view.dispatch({
+      changes: { from: startLine.from, to: startLine.to, insert: newLine },
+      selection: { anchor: startLine.from + newLine.length },
+    });
+    view.focus();
+    return;
+  }
+
+  // Multi-line selection
   let allBullets = true;
   for (let l = startLine.number; l <= endLine.number; l++) {
     const lineText = state.doc.line(l).text;
@@ -163,13 +197,31 @@ export function setBulletList(view: EditorView) {
  * Formats all selected lines into a numbered list item (1. item, 2. item, ...)
  * If all selected lines are already numbered, toggles them back to plain text.
  */
-export function setNumberedList(view: EditorView) {
+export function setNumberedList(view: EditorView, range?: { from: number; to: number }) {
   const { state } = view;
-  const sel = state.selection.main;
-  const startLine = state.doc.lineAt(sel.from);
-  const endLine = state.doc.lineAt(sel.to);
+  const selFrom = range ? range.from : state.selection.main.from;
+  const selTo = range ? range.to : state.selection.main.to;
+  const startLine = state.doc.lineAt(selFrom);
+  const endLine = state.doc.lineAt(selTo);
 
-  // Check if all lines are already numbered
+  // Single line case
+  if (startLine.number === endLine.number) {
+    const lineText = startLine.text;
+    const isNumbered = /^\s*\d+\.\s+/.test(lineText);
+    const clean = range
+      ? cleanLinePrefix(lineText.slice(0, range.from - startLine.from) + lineText.slice(range.to - startLine.from)).trim()
+      : cleanLinePrefix(lineText);
+
+    const newLine = isNumbered && !range ? clean : `1. ${clean}`;
+    view.dispatch({
+      changes: { from: startLine.from, to: startLine.to, insert: newLine },
+      selection: { anchor: startLine.from + newLine.length },
+    });
+    view.focus();
+    return;
+  }
+
+  // Multi-line selection
   let allNumbered = true;
   for (let l = startLine.number; l <= endLine.number; l++) {
     const lineText = state.doc.line(l).text;
@@ -200,12 +252,32 @@ export function setNumberedList(view: EditorView) {
  * Formats all selected lines into a task list item (- [ ] item)
  * If all selected lines are already task items, toggles them back to plain text.
  */
-export function setTaskList(view: EditorView) {
+export function setTaskList(view: EditorView, range?: { from: number; to: number }) {
   const { state } = view;
-  const sel = state.selection.main;
-  const startLine = state.doc.lineAt(sel.from);
-  const endLine = state.doc.lineAt(sel.to);
+  const selFrom = range ? range.from : state.selection.main.from;
+  const selTo = range ? range.to : state.selection.main.to;
+  const startLine = state.doc.lineAt(selFrom);
+  const endLine = state.doc.lineAt(selTo);
 
+  // Single line case (whether empty or with text)
+  if (startLine.number === endLine.number) {
+    const lineText = startLine.text;
+    const isTask = /^\s*-\s*\[[ xX]\]\s*/.test(lineText);
+    const clean = range
+      ? cleanLinePrefix(lineText.slice(0, range.from - startLine.from) + lineText.slice(range.to - startLine.from)).trim()
+      : cleanLinePrefix(lineText);
+
+    // Toggle: if already a task and no range to clear, convert back to plain text
+    const newLine = isTask && !range ? clean : `- [ ] ${clean}`;
+    view.dispatch({
+      changes: { from: startLine.from, to: startLine.to, insert: newLine },
+      selection: { anchor: startLine.from + newLine.length },
+    });
+    view.focus();
+    return;
+  }
+
+  // Multi-line selection
   let allTasks = true;
   for (let l = startLine.number; l <= endLine.number; l++) {
     const lineText = state.doc.line(l).text;
@@ -598,6 +670,115 @@ export const markdownFormattingKeymap: KeyBinding[] = [
     run: (view) => {
       setTaskList(view);
       return true;
+    },
+  },
+  {
+    key: 'Enter',
+    run: (view) => {
+      const { state } = view;
+      const sel = state.selection.main;
+      if (!sel.empty) return false;
+
+      const line = state.doc.lineAt(sel.from);
+      const textBefore = line.text.slice(0, sel.from - line.from);
+
+      // 1. Task list item: - [ ] or - [x]
+      const taskMatch = textBefore.match(/^(\s*)-\s*\[([ xX])\]\s*(.*)$/);
+      if (taskMatch) {
+        const indent = taskMatch[1];
+        const content = taskMatch[3].trim();
+        // If task item is empty (e.g. user pressed Enter on an empty "- [ ] "):
+        if (content.length === 0 && line.text.trim().match(/^-\s*\[([ xX])\]\s*$/)) {
+          view.dispatch({
+            changes: { from: line.from, to: line.to, insert: '' },
+            selection: { anchor: line.from },
+          });
+          return true;
+        }
+        const nextMarker = `\n${indent}- [ ] `;
+        view.dispatch({
+          changes: { from: sel.from, to: sel.to, insert: nextMarker },
+          selection: { anchor: sel.from + nextMarker.length },
+        });
+        return true;
+      }
+
+      // 2. Bullet list item: - or *
+      const bulletMatch = textBefore.match(/^(\s*)([-*])\s+(.*)$/);
+      if (bulletMatch) {
+        const indent = bulletMatch[1];
+        const marker = bulletMatch[2];
+        const content = bulletMatch[3].trim();
+        if (content.length === 0 && line.text.trim().match(/^[-*]\s*$/)) {
+          view.dispatch({
+            changes: { from: line.from, to: line.to, insert: '' },
+            selection: { anchor: line.from },
+          });
+          return true;
+        }
+        const nextMarker = `\n${indent}${marker} `;
+        view.dispatch({
+          changes: { from: sel.from, to: sel.to, insert: nextMarker },
+          selection: { anchor: sel.from + nextMarker.length },
+        });
+        return true;
+      }
+
+      // 3. Numbered list item: 1. , 2. , etc.
+      const numMatch = textBefore.match(/^(\s*)(\d+)\.\s+(.*)$/);
+      if (numMatch) {
+        const indent = numMatch[1];
+        const num = parseInt(numMatch[2], 10);
+        const content = numMatch[3].trim();
+        if (content.length === 0 && line.text.trim().match(/^\d+\.\s*$/)) {
+          view.dispatch({
+            changes: { from: line.from, to: line.to, insert: '' },
+            selection: { anchor: line.from },
+          });
+          return true;
+        }
+        const nextMarker = `\n${indent}${num + 1}. `;
+        view.dispatch({
+          changes: { from: sel.from, to: sel.to, insert: nextMarker },
+          selection: { anchor: sel.from + nextMarker.length },
+        });
+        return true;
+      }
+
+      return false;
+    },
+  },
+  {
+    key: 'Backspace',
+    run: (view) => {
+      const { state } = view;
+      const sel = state.selection.main;
+      if (!sel.empty) return false;
+
+      const line = state.doc.lineAt(sel.from);
+      // If cursor is at the end of an empty task item or bullet item
+      if (line.text.match(/^(\s*)-\s*\[[ xX]\]\s*$/) && sel.from === line.to) {
+        view.dispatch({
+          changes: { from: line.from, to: line.to, insert: '' },
+          selection: { anchor: line.from },
+        });
+        return true;
+      }
+      if (line.text.match(/^(\s*)[-*]\s*$/) && sel.from === line.to) {
+        view.dispatch({
+          changes: { from: line.from, to: line.to, insert: '' },
+          selection: { anchor: line.from },
+        });
+        return true;
+      }
+      if (line.text.match(/^(\s*)\d+\.\s*$/) && sel.from === line.to) {
+        view.dispatch({
+          changes: { from: line.from, to: line.to, insert: '' },
+          selection: { anchor: line.from },
+        });
+        return true;
+      }
+      return false;
     },
   },
 ];

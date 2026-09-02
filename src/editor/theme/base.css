@@ -118,7 +118,7 @@
 .cm-content {
   max-width: var(--as-measure);
   width: 100%;
-  padding: 0 36px 240px 36px;
+  padding: 0 48px 240px 48px;
   box-sizing: border-box;
   caret-color: var(--as-caret);
 }
