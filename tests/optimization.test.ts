@@ -3,7 +3,7 @@ import { computeWordCount, computeReadingTime, useWorkspaceStore } from '../src/
 import { parseMarkdownTable, serializeMarkdownTable } from '../src/editor/widgets/table';
 import { findInlineSpans } from '../src/editor/decorations/delimiter-guard';
 import { formatDisplayName } from '../src/core/document/file-meta';
-import { syncDocumentHeading } from '../src/core/document/document';
+import { syncDocumentHeading, extractDocumentHeading } from '../src/core/document/document';
 
 describe('Fast Word Count & Reading Time', () => {
   test('Empty and whitespace-only strings return 0 words', () => {
@@ -150,6 +150,35 @@ describe('File Display Name & Rename Sanitization', () => {
     expect(alphaDoc?.currentText.startsWith('# Engineering Roadmap')).toBe(true);
     // Page Beta's heading is strictly untouched
     expect(betaDoc?.currentText.startsWith('# Page Beta')).toBe(true);
+  });
+
+  test('extractDocumentHeading extracts title from various markdown styles', () => {
+    expect(extractDocumentHeading('# My Project Notes\nBody text')).toBe('My Project Notes');
+    expect(extractDocumentHeading('# **Bold Title**')).toBe('Bold Title');
+    expect(extractDocumentHeading('---\ntitle: YAML\n---\n# Real Title\n\nContent')).toBe('Real Title');
+    expect(extractDocumentHeading('No heading at all\nJust text')).toBeNull();
+    expect(extractDocumentHeading('# ')).toBeNull();
+    expect(extractDocumentHeading('## H2 Subheading')).toBeNull();
+  });
+
+  test('changing heading inside page reflects back in sidebar document fileName', () => {
+    const store = useWorkspaceStore.getState();
+    store.createEmptyDocument('Untitled-1.md');
+    const docId = useWorkspaceStore.getState().activeDocumentId!;
+
+    // Initially fileName is Untitled-1.md
+    expect(useWorkspaceStore.getState().documents.find((d) => d.id === docId)?.meta.fileName).toBe('Untitled-1.md');
+
+    // User types '# Sprint Planning' inside the page
+    store.updateDocumentContent(docId, '# Sprint Planning\n\n- Task 1\n- Task 2');
+
+    const updatedDoc = useWorkspaceStore.getState().documents.find((d) => d.id === docId);
+    expect(updatedDoc?.meta.fileName).toBe('Sprint Planning.md');
+    expect(formatDisplayName(updatedDoc!.meta.fileName)).toBe('Sprint Planning');
+
+    // Editing body content without changing heading preserves fileName
+    store.updateDocumentContent(docId, '# Sprint Planning\n\n- Task 1\n- Task 2\n- Task 3');
+    expect(useWorkspaceStore.getState().documents.find((d) => d.id === docId)?.meta.fileName).toBe('Sprint Planning.md');
   });
 
   test('deleteDocument removes document and updates activeDocumentId or creates fresh note', () => {

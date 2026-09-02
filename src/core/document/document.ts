@@ -92,3 +92,19 @@ export function syncDocumentHeading(text: string, title: string): string {
   return `${headingLine}\n\n` + text.replace(/^\r?\n*/, '');
 }
 
+export function extractDocumentHeading(text: string): string | null {
+  // Check frontmatter
+  const frontmatterMatch = text.match(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n)*/);
+  const body = frontmatterMatch ? text.slice(frontmatterMatch[0].length) : text;
+
+  // Match the first H1 heading line
+  const headingMatch = body.match(/^#\s+([^\r\n]+)/m);
+  if (!headingMatch) return null;
+
+  const headingText = headingMatch[1].trim();
+  // Strip inline formatting like bold or code spans
+  const cleanTitle = headingText.replace(/[*_~`]/g, '').trim();
+  return cleanTitle || null;
+}
+
+

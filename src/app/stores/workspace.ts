@@ -7,6 +7,7 @@ import {
   FolderItem,
   createFolderItem,
   syncDocumentHeading,
+  extractDocumentHeading,
 } from '../../core/document/document';
 import { formatDisplayName } from '../../core/document/file-meta';
 
@@ -426,11 +427,41 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
       updateDocumentContent: (id: string, newContent: string) => {
         const words = computeWordCount(newContent);
+        const headingTitle = extractDocumentHeading(newContent);
+
         set((state) => ({
           documents: state.documents.map((doc) => {
             if (doc.id === id) {
               const isDirty = newContent !== doc.initialText;
-              return { ...doc, currentText: newContent, isDirty };
+              let meta = doc.meta;
+
+              if (headingTitle) {
+                const sanitized = headingTitle.replace(/[/\\?%*:|"<>]/g, '-').trim();
+                if (sanitized) {
+                  const hadMd = doc.meta.fileName.toLowerCase().endsWith('.md');
+                  const newFileName = hadMd ? `${sanitized}.md` : sanitized;
+
+                  if (newFileName !== doc.meta.fileName) {
+                    let newFilePath = doc.meta.filePath;
+                    if (doc.meta.filePath) {
+                      const parts = doc.meta.filePath.split(/[/\\]/);
+                      if (parts.length > 1) {
+                        parts[parts.length - 1] = newFileName;
+                        newFilePath = parts.join('/');
+                      } else {
+                        newFilePath = newFileName;
+                      }
+                    }
+                    meta = {
+                      ...doc.meta,
+                      fileName: newFileName,
+                      filePath: newFilePath,
+                    };
+                  }
+                }
+              }
+
+              return { ...doc, currentText: newContent, isDirty, meta };
             }
             return doc;
           }),
