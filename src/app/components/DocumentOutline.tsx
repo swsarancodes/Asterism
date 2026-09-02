@@ -51,11 +51,25 @@ export function extractDocumentHeadings(markdown: string): DocumentHeading[] {
   return headings;
 }
 
+export function findActiveHeading(headings: DocumentHeading[], targetLine: number): DocumentHeading | null {
+  if (headings.length === 0) return null;
+  let active: DocumentHeading | null = null;
+  for (const h of headings) {
+    if (h.line <= targetLine) {
+      active = h;
+    } else {
+      break;
+    }
+  }
+  return active || headings[0] || null;
+}
+
 export const DocumentOutline: React.FC = () => {
   const activeId = useWorkspaceStore((s) => s.activeDocumentId);
   const documents = useWorkspaceStore((s) => s.documents);
   const wordCount = useWorkspaceStore((s) => s.wordCount);
   const readingTimeMin = useWorkspaceStore((s) => s.readingTimeMin);
+  const cursorLine = useWorkspaceStore((s) => s.cursorLine);
   const outlineOpen = useSettingsStore((s) => s.outlineOpen);
   const toggleOutline = useSettingsStore((s) => s.toggleOutline);
 
@@ -63,6 +77,39 @@ export const DocumentOutline: React.FC = () => {
   const headings = useMemo(() => {
     return currentDoc ? extractDocumentHeadings(currentDoc.currentText) : [];
   }, [currentDoc?.currentText]);
+
+  const [activeHeadingId, setActiveHeadingId] = React.useState<string | null>(null);
+
+  // Scroll spy & cursor tracking observer
+  React.useEffect(() => {
+    const scroller = typeof document !== 'undefined' ? document.querySelector('.cm-scroller') : null;
+    if (!scroller) {
+      const active = findActiveHeading(headings, cursorLine);
+      setActiveHeadingId(active ? active.id : null);
+      return;
+    }
+
+    const updateActive = () => {
+      const editorView = (scroller.closest('.cm-editor') as any)?.__cmView?.view;
+      if (editorView) {
+        try {
+          const topBlock = editorView.lineBlockAtHeight(scroller.scrollTop + 40);
+          const currentScrollLine = editorView.state.doc.lineAt(topBlock.from).number;
+          const active = findActiveHeading(headings, currentScrollLine);
+          setActiveHeadingId(active ? active.id : null);
+          return;
+        } catch {
+          // fallback
+        }
+      }
+      const active = findActiveHeading(headings, cursorLine);
+      setActiveHeadingId(active ? active.id : null);
+    };
+
+    updateActive();
+    scroller.addEventListener('scroll', updateActive, { passive: true });
+    return () => scroller.removeEventListener('scroll', updateActive);
+  }, [headings, cursorLine]);
 
   if (!outlineOpen) return null;
 
@@ -180,9 +227,10 @@ export const DocumentOutline: React.FC = () => {
           </div>
         ) : (
           headings.map((heading) => {
+            const isActive = activeHeadingId === heading.id;
             const indent = (heading.level - 1) * 12;
-            const fontWeight = heading.level === 1 ? 600 : heading.level === 2 ? 500 : 400;
-            const opacity = heading.level === 1 ? 1 : heading.level === 2 ? 0.9 : 0.75;
+            const fontWeight = isActive ? 600 : heading.level === 1 ? 600 : heading.level === 2 ? 500 : 400;
+            const opacity = isActive ? 1 : heading.level === 1 ? 1 : heading.level === 2 ? 0.9 : 0.75;
 
             return (
               <div
@@ -197,16 +245,18 @@ export const DocumentOutline: React.FC = () => {
                   borderRadius: 'var(--as-radius-sm)',
                   fontSize: '12.5px',
                   fontWeight,
-                  color: 'var(--as-text)',
+                  color: isActive ? 'var(--as-accent)' : 'var(--as-text)',
+                  backgroundColor: isActive ? 'var(--as-bg-subtle)' : 'transparent',
+                  borderLeft: isActive ? '2.5px solid var(--as-accent)' : '2.5px solid transparent',
                   opacity,
                   cursor: 'pointer',
-                  transition: 'background-color var(--as-transition-fast)',
+                  transition: 'all var(--as-transition-fast)',
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--as-bg-hover)';
+                  if (!isActive) e.currentTarget.style.backgroundColor = 'var(--as-bg-hover)';
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
+                  if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
                 }}
                 title={`Line ${heading.line}: ${heading.text}`}
               >
@@ -216,9 +266,9 @@ export const DocumentOutline: React.FC = () => {
                     width: heading.level === 1 ? '6px' : '4px',
                     height: heading.level === 1 ? '6px' : '4px',
                     borderRadius: '50%',
-                    backgroundColor: heading.level === 1 ? 'var(--as-accent)' : 'var(--as-text-muted)',
+                    backgroundColor: isActive || heading.level === 1 ? 'var(--as-accent)' : 'var(--as-text-muted)',
                     flexShrink: 0,
-                    opacity: 0.8,
+                    opacity: isActive ? 1 : 0.8,
                   }}
                 />
                 <span

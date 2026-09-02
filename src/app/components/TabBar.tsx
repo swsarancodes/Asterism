@@ -2,8 +2,9 @@ import React from 'react';
 import { useWorkspaceStore } from '../stores/workspace';
 import { useSettingsStore } from '../stores/settings';
 import { ViewMode } from '../../editor/modes/view-mode';
-import { FileText, Plus, X, Eye, Code, Columns, PanelLeft, ListTree } from 'lucide-react';
+import { FileText, Plus, X, Eye, Code, Columns, PanelLeft, ListTree, Search, Download, Printer, FileDown, ChevronDown } from 'lucide-react';
 import { formatDisplayName } from '../../core/document/file-meta';
+import { exportToPdf, exportToMarkdown, exportToHtml } from '../../core/document/export';
 
 export const TabBar: React.FC = () => {
   const documents = useWorkspaceStore((s) => s.documents);
@@ -19,10 +20,38 @@ export const TabBar: React.FC = () => {
   const toggleSidebar = useSettingsStore((s) => s.toggleSidebar);
   const outlineOpen = useSettingsStore((s) => s.outlineOpen);
   const toggleOutline = useSettingsStore((s) => s.toggleOutline);
+  const toggleSearchModal = useSettingsStore((s) => s.toggleSearchModal);
 
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [editingName, setEditingName] = React.useState('');
+  const [exportMenuOpen, setExportMenuOpen] = React.useState(false);
+  const exportRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
+
+  // Close export dropdown when clicking outside
+  React.useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+        setExportMenuOpen(false);
+      }
+    };
+    if (exportMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [exportMenuOpen]);
+
+  // Global shortcut for PDF Export / Print (⌘P)
+  React.useEffect(() => {
+    const handlePrint = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault();
+        exportToPdf();
+      }
+    };
+    window.addEventListener('keydown', handlePrint);
+    return () => window.removeEventListener('keydown', handlePrint);
+  }, []);
 
   // Global shortcut for Document Outline (⌘⇧O)
   React.useEffect(() => {
@@ -106,9 +135,11 @@ export const TabBar: React.FC = () => {
           </button>
         )}
 
-        {documents.map((doc) => {
-          const isActive = doc.id === activeId;
-          const isEditing = doc.id === editingId;
+        {documents
+          .filter((doc) => !doc.deletedAt)
+          .map((doc) => {
+            const isActive = doc.id === activeId;
+            const isEditing = doc.id === editingId;
 
           return (
             <div
@@ -316,6 +347,179 @@ export const TabBar: React.FC = () => {
           <ListTree size={14} />
           <span>Outline</span>
         </button>
+
+        {/* Full-Text Search Button */}
+        <button
+          type="button"
+          onClick={toggleSearchModal}
+          title="Full-Text Search (⌘⇧F)"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+            padding: '5px 8px',
+            border: 'none',
+            borderRadius: 'var(--as-radius-sm)',
+            fontSize: '12px',
+            fontWeight: 400,
+            color: 'var(--as-text-muted)',
+            backgroundColor: 'transparent',
+            cursor: 'pointer',
+            transition: 'all var(--as-transition-fast)',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = 'var(--as-bg-subtle)';
+            e.currentTarget.style.color = 'var(--as-text)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = 'transparent';
+            e.currentTarget.style.color = 'var(--as-text-muted)';
+          }}
+        >
+          <Search size={14} />
+          <span>Search</span>
+        </button>
+
+        {/* Export Dropdown */}
+        <div ref={exportRef} style={{ position: 'relative' }}>
+          <button
+            type="button"
+            onClick={() => setExportMenuOpen(!exportMenuOpen)}
+            title="Export Document (⌘P for PDF)"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '5px 8px',
+              border: 'none',
+              borderRadius: 'var(--as-radius-sm)',
+              fontSize: '12px',
+              fontWeight: 400,
+              color: 'var(--as-text-muted)',
+              backgroundColor: exportMenuOpen ? 'var(--as-bg-subtle)' : 'transparent',
+              cursor: 'pointer',
+              transition: 'all var(--as-transition-fast)',
+            }}
+            onMouseEnter={(e) => {
+              if (!exportMenuOpen) {
+                e.currentTarget.style.backgroundColor = 'var(--as-bg-subtle)';
+                e.currentTarget.style.color = 'var(--as-text)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!exportMenuOpen) {
+                e.currentTarget.style.backgroundColor = 'transparent';
+                e.currentTarget.style.color = 'var(--as-text-muted)';
+              }
+            }}
+          >
+            <Download size={14} />
+            <span>Export</span>
+            <ChevronDown size={11} style={{ opacity: 0.7 }} />
+          </button>
+
+          {exportMenuOpen && (
+            <div
+              style={{
+                position: 'absolute',
+                top: '100%',
+                right: 0,
+                marginTop: '4px',
+                width: '180px',
+                backgroundColor: 'var(--as-bg-surface)',
+                border: '1px solid var(--as-border)',
+                borderRadius: 'var(--as-radius-sm, 6px)',
+                boxShadow: 'var(--as-shadow-md)',
+                padding: '4px',
+                zIndex: 100,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '2px',
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setExportMenuOpen(false);
+                  exportToPdf();
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '6px 10px',
+                  fontSize: '12px',
+                  color: 'var(--as-text)',
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  width: '100%',
+                  textAlign: 'left',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--as-bg-hover)')}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+              >
+                <Printer size={13} style={{ color: 'var(--as-accent)' }} />
+                <span>Export PDF (⌘P)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setExportMenuOpen(false);
+                  const activeDoc = documents.find((d) => d.id === activeId);
+                  if (activeDoc) exportToMarkdown(activeDoc.meta.fileName, activeDoc.currentText);
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '6px 10px',
+                  fontSize: '12px',
+                  color: 'var(--as-text)',
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  width: '100%',
+                  textAlign: 'left',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--as-bg-hover)')}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+              >
+                <FileDown size={13} style={{ color: 'var(--as-accent)' }} />
+                <span>Save Markdown (.md)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setExportMenuOpen(false);
+                  const activeDoc = documents.find((d) => d.id === activeId);
+                  if (activeDoc) exportToHtml(activeDoc.meta.fileName, activeDoc.currentText);
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '6px 10px',
+                  fontSize: '12px',
+                  color: 'var(--as-text)',
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  width: '100%',
+                  textAlign: 'left',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--as-bg-hover)')}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+              >
+                <FileText size={13} style={{ color: 'var(--as-accent)' }} />
+                <span>Export HTML (.html)</span>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

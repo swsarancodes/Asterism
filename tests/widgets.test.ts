@@ -5,6 +5,7 @@ import { MermaidWidget } from '../src/editor/widgets/mermaid';
 import { CodeBlockWidget } from '../src/editor/widgets/code-block';
 import { CalloutWidget } from '../src/editor/widgets/callout';
 import { ImageWidget, parseImageMarkdown, serializeImageMarkdown } from '../src/editor/widgets/image';
+import { blockWidgetField } from '../src/editor/widgets/plugin';
 import { EditorState, EditorSelection } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import {
@@ -19,6 +20,12 @@ import {
   markdownFormattingKeymap,
 } from '../src/editor/commands/formatting';
 import { findLinkUrlAt, imagePasteDropExtension } from '../src/editor/setup';
+import { wikilinkPlugin } from '../src/editor/decorations/wikilink';
+import { wikilinkCompletionSource } from '../src/editor/completions/wikilink-completion';
+import { useWorkspaceStore } from '../src/app/stores/workspace';
+import { codeFolding, foldCode, unfoldCode, foldable } from '@codemirror/language';
+import { createMarkdownExtension } from '../src/core/markdown/grammar';
+import { MathWidget, mathPlugin } from '../src/editor/decorations/math';
 
 beforeAll(() => {
   const window = new GlobalWindow();
@@ -104,7 +111,7 @@ describe('TableWidget In-Place Code & Visual Editing', () => {
     expect(codeBtn).toBeDefined();
 
     // Visual mode initially has interactive cells
-    const cells = dom.querySelectorAll('th, td');
+    const cells = dom.querySelectorAll('.as-table-cell-header, .as-table-cell-data');
     expect(cells.length).toBe(4); // 2 headers + 2 cells
 
     // Switch to Code mode
@@ -124,13 +131,238 @@ describe('TableWidget In-Place Code & Visual Editing', () => {
     expect(dom.dataset.mode).toBe('split');
 
     // In Split mode, visual table has updated row count
-    const updatedCells = dom.querySelectorAll('tbody td');
+    const updatedCells = dom.querySelectorAll('tbody td.as-table-cell-data');
     expect(updatedCells.length).toBe(4); // 2 rows of 2 cols = 4 cells
 
     // Verify updateDOM returns true
     const nextWidget = new TableWidget(textarea.value, 0, textarea.value.length);
     const retained = nextWidget.updateDOM(dom, view);
     expect(retained).toBe(true);
+  });
+
+  test('TableWidget operations: adding, removing, and modifying rows without duplicating or corrupting', () => {
+    const initialSource = '| Item | Price |\n| :--- | ---: |\n| Apple | 10 |\n| Banana | 20 |\n| Cherry | 30 |';
+    const state = EditorState.create({
+      doc: initialSource,
+      extensions: [createMarkdownExtension(), blockWidgetField],
+    });
+    const view = new EditorView({ state });
+    document.body.appendChild(view.dom);
+
+    const container = view.dom.querySelector('.as-table-container') as HTMLElement;
+    expect(container).not.toBeNull();
+
+    // 1. Verify initial rows count
+    let rows = container.querySelectorAll('tbody tr:not(.as-table-empty-tr)');
+    expect(rows.length).toBe(3);
+
+    // 2. Click "- Row" to remove the bottom row (Cherry)
+    const removeRowBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent === '- Row'
+    ) as HTMLButtonElement;
+    expect(removeRowBtn).toBeDefined();
+    removeRowBtn.click();
+
+    // CRITICAL: Doc must have 2 rows now, NOT duplicated or extra rows!
+    const docAfterRemove = view.state.doc.toString();
+    expect(docAfterRemove).toContain('Apple');
+    expect(docAfterRemove).toContain('Banana');
+    expect(docAfterRemove).not.toContain('Cherry');
+    expect(docAfterRemove.split('\n').filter((l) => l.trim().length > 0).length).toBe(4); // Header, align, 2 rows
+
+    rows = container.querySelectorAll('tbody tr:not(.as-table-empty-tr)');
+    expect(rows.length).toBe(2);
+
+    // 3. Click "+ Row" to add a new empty row
+    const addRowBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent === '+ Row'
+    ) as HTMLButtonElement;
+    expect(addRowBtn).toBeDefined();
+    addRowBtn.click();
+
+    const docAfterAdd = view.state.doc.toString();
+    expect(docAfterAdd.split('\n').filter((l) => l.trim().length > 0).length).toBe(5); // Header, align, 3 rows
+    rows = container.querySelectorAll('tbody tr:not(.as-table-empty-tr)');
+    expect(rows.length).toBe(3);
+
+    // 4. Delete a specific row in the middle (Banana, index 1)
+    const middleRow = rows[1];
+    const delMiddleBtn = middleRow.querySelector('.as-table-row-action-del') as HTMLButtonElement;
+    expect(delMiddleBtn).not.toBeNull();
+    delMiddleBtn.click();
+
+    const docAfterDelMiddle = view.state.doc.toString();
+    expect(docAfterDelMiddle).not.toContain('Banana');
+    expect(docAfterDelMiddle).toContain('Apple');
+    rows = container.querySelectorAll('tbody tr:not(.as-table-empty-tr)');
+    expect(rows.length).toBe(2);
+
+    // 5. Insert row below the first row using row action (+)
+    const firstRow = rows[0];
+    const insertBelowBtn = firstRow.querySelector('.as-table-row-action-btn:not(.as-table-row-action-del)') as HTMLButtonElement;
+    expect(insertBelowBtn).not.toBeNull();
+    insertBelowBtn.click();
+
+    rows = container.querySelectorAll('tbody tr:not(.as-table-empty-tr)');
+    expect(rows.length).toBe(3);
+
+    // 6. Modify a cell value and verify CodeMirror doc updates
+    const firstCell = rows[0].querySelector('td.as-table-cell-data') as HTMLElement;
+    firstCell.textContent = 'Honeycrisp Apple';
+    firstCell.dispatchEvent(new Event('blur'));
+
+    expect(view.state.doc.toString()).toContain('Honeycrisp Apple');
+
+    // 7. Add Column (+ Col)
+    const addColBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent === '+ Col'
+    ) as HTMLButtonElement;
+    expect(addColBtn).toBeDefined();
+    addColBtn.click();
+
+    expect(view.state.doc.toString()).toContain('Col 3');
+    let headers = container.querySelectorAll('thead th.as-table-cell-header');
+    expect(headers.length).toBe(3);
+
+    // 8. Remove Column (- Col)
+    const removeColBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent === '- Col'
+    ) as HTMLButtonElement;
+    expect(removeColBtn).toBeDefined();
+    removeColBtn.click();
+
+    expect(view.state.doc.toString()).not.toContain('Col 3');
+    headers = container.querySelectorAll('thead th.as-table-cell-header');
+    expect(headers.length).toBe(2);
+
+    // Cleanup DOM
+    document.body.removeChild(view.dom);
+  });
+
+  test('TableWidget Tab key at bottom-right preserves typed text and appends row', () => {
+    const initialSource = '| A | B |\n| :--- | :--- |\n| One | Two |';
+    const state = EditorState.create({
+      doc: initialSource,
+      extensions: [createMarkdownExtension(), blockWidgetField],
+    });
+    const view = new EditorView({ state });
+    document.body.appendChild(view.dom);
+
+    const container = view.dom.querySelector('.as-table-container') as HTMLElement;
+    const lastCell = container.querySelector('tbody tr:last-child td.as-table-cell-data:nth-child(2)') as HTMLElement;
+    expect(lastCell).not.toBeNull();
+
+    // Type new text into the last cell
+    lastCell.textContent = 'Two Updated';
+
+    // Press Tab
+    lastCell.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+
+    // Doc must preserve 'Two Updated' and have an appended row
+    const doc = view.state.doc.toString();
+    expect(doc).toContain('Two Updated');
+    const rows = container.querySelectorAll('tbody tr:not(.as-table-empty-tr)');
+    expect(rows.length).toBe(2); // 1 original + 1 newly appended
+
+    document.body.removeChild(view.dom);
+  });
+
+  test('TableWidget delete button removes entire table cleanly', () => {
+    const doc = '# Top\n\n| X | Y |\n| --- | --- |\n| 1 | 2 |\n\n# Bottom';
+    const state = EditorState.create({
+      doc,
+      extensions: [createMarkdownExtension(), blockWidgetField],
+    });
+    const view = new EditorView({ state });
+    document.body.appendChild(view.dom);
+
+    const container = view.dom.querySelector('.as-table-container') as HTMLElement;
+    const deleteBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent === 'Delete'
+    ) as HTMLButtonElement;
+    expect(deleteBtn).toBeDefined();
+
+    deleteBtn.click();
+
+    const afterDelete = view.state.doc.toString();
+    expect(afterDelete).not.toContain('| X | Y |');
+    expect(afterDelete).toContain('# Top');
+    expect(afterDelete).toContain('# Bottom');
+
+    document.body.removeChild(view.dom);
+  });
+
+  test('TableWidget supports removing down to 0 rows and adding a row back', () => {
+    const singleRowSource = '| Col 1 | Col 2 |\n| :--- | :--- |\n| Val 1 | Val 2 |';
+    const state = EditorState.create({
+      doc: singleRowSource,
+      extensions: [createMarkdownExtension(), blockWidgetField],
+    });
+    const view = new EditorView({ state });
+    document.body.appendChild(view.dom);
+
+    const container = view.dom.querySelector('.as-table-container') as HTMLElement;
+    const removeRowBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent === '- Row'
+    ) as HTMLButtonElement;
+
+    // 1. Remove the single row
+    removeRowBtn.click();
+
+    // Markdown should still be valid table header without crashing
+    const doc = view.state.doc.toString();
+    expect(doc).toContain('| Col 1 | Col 2 |');
+    expect(doc).not.toContain('Val 1');
+
+    // Shows empty placeholder
+    const emptyNotice = container.querySelector('.as-table-empty-td');
+    expect(emptyNotice).not.toBeNull();
+    expect(emptyNotice?.textContent).toContain('No rows yet');
+
+    // 2. Add row back
+    const addRowBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent === '+ Row'
+    ) as HTMLButtonElement;
+    addRowBtn.click();
+
+    const rows = container.querySelectorAll('tbody tr:not(.as-table-empty-tr)');
+    expect(rows.length).toBe(1);
+    expect(view.state.doc.toString().split('\n').filter((l) => l.trim().length > 0).length).toBe(3);
+
+    document.body.removeChild(view.dom);
+  });
+
+  test('TableWidget arrow navigation moves focus up and down between cells', () => {
+    const source = '| Alpha | Beta |\n| :--- | :--- |\n| A1 | B1 |\n| A2 | B2 |';
+    const state = EditorState.create({
+      doc: source,
+      extensions: [createMarkdownExtension(), blockWidgetField],
+    });
+    const view = new EditorView({ state });
+    document.body.appendChild(view.dom);
+
+    const container = view.dom.querySelector('.as-table-container') as HTMLElement;
+    const thAlpha = container.querySelector('thead th.as-table-cell-header:nth-child(1)') as HTMLElement;
+    const tdA1 = container.querySelector('tbody tr:nth-child(1) td.as-table-cell-data:nth-child(1)') as HTMLElement;
+    const tdA2 = container.querySelector('tbody tr:nth-child(2) td.as-table-cell-data:nth-child(1)') as HTMLElement;
+
+    // Header ArrowDown focuses A1
+    thAlpha.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    expect(document.activeElement).toBe(tdA1);
+
+    // Row 0 ArrowDown focuses A2
+    tdA1.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    expect(document.activeElement).toBe(tdA2);
+
+    // Row 1 ArrowUp focuses A1
+    tdA2.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+    expect(document.activeElement).toBe(tdA1);
+
+    // Row 0 ArrowUp focuses thAlpha
+    tdA1.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+    expect(document.activeElement).toBe(thAlpha);
+
+    document.body.removeChild(view.dom);
   });
 });
 
@@ -403,6 +635,130 @@ describe('Task List & Empty Line List Formatting', () => {
     expect(modEnter).toBeDefined();
     modEnter?.run(view3);
     expect(view3.state.doc.toString()).toBe('- [x] Plain bullet note');
+  });
+});
+
+describe('Wikilinks & Note Auto-Complete', () => {
+  test('wikilinkPlugin creates WikilinkWidget when cursor is outside target range', () => {
+    const doc = 'Check out [[Architecture]] for design notes.';
+    const state = EditorState.create({
+      doc,
+      extensions: [wikilinkPlugin],
+    });
+    const view = new EditorView({ state });
+    // Position cursor at end of doc, away from [[Architecture]]
+    view.dispatch({ selection: { anchor: doc.length, head: doc.length } });
+
+    const plugin = view.plugin(wikilinkPlugin as any);
+    expect(plugin).toBeDefined();
+    expect(plugin.decorations.size).toBe(1);
+
+    let hasWidget = false;
+    plugin.decorations.between(0, doc.length, (_from: number, _to: number, deco: any) => {
+      if (deco.spec.widget) {
+        hasWidget = true;
+        expect(deco.spec.widget.target).toBe('Architecture');
+        const dom = deco.spec.widget.toDOM();
+        expect(dom.className).toBe('as-wikilink-pill');
+        expect(dom.textContent).toContain('Architecture');
+      }
+    });
+    expect(hasWidget).toBe(true);
+  });
+
+  test('wikilinkCompletionSource provides note title completions when typing [[', () => {
+    const store = useWorkspaceStore.getState();
+    store.createEmptyDocument('System Design.md', null);
+
+    const text = 'Here is [[Sys';
+    const state = EditorState.create({ doc: text });
+    const view = new EditorView({ state });
+
+    const mockContext: any = {
+      state,
+      pos: text.length,
+      matchBefore: (regex: RegExp) => {
+        const match = regex.exec(text);
+        if (!match) return null;
+        return { from: match.index, to: text.length, text: match[0] };
+      },
+    };
+
+    const result = wikilinkCompletionSource(mockContext);
+    expect(result).not.toBeNull();
+    expect(result!.options.length).toBeGreaterThan(0);
+    const hasSysDesign = result!.options.some((o: any) => o.label === 'System Design');
+    expect(hasSysDesign).toBe(true);
+  });
+});
+
+describe('Foldable Headings & Section Folding', () => {
+  test('Markdown headings are recognized as foldable ranges', () => {
+    const markdown = `# Architecture Overview
+Here is the first section paragraph with details.
+More details.
+
+## Database Layer
+PostgreSQL specifications.`;
+
+    const state = EditorState.create({
+      doc: markdown,
+      extensions: [createMarkdownExtension(), codeFolding()],
+    });
+    const view = new EditorView({ state });
+
+    const line1 = view.state.doc.line(1);
+    const foldRange = foldable(view.state, line1.from, line1.to);
+    expect(foldRange).not.toBeNull();
+    expect(foldRange!.from).toBe(line1.to);
+
+    // Can fold and unfold the view
+    const folded = foldCode(view);
+    expect(typeof folded).toBe('boolean');
+    const unfolded = unfoldCode(view);
+    expect(typeof unfolded).toBe('boolean');
+  });
+});
+
+describe('KaTeX Math Formula Rendering', () => {
+  test('MathWidget renders inline math with KaTeX markup', () => {
+    const widget = new MathWidget('E = mc^2', false);
+    const mockView = {} as any;
+    const dom = widget.toDOM(mockView);
+
+    expect(dom.tagName.toLowerCase()).toBe('span');
+    expect(dom.className).toBe('as-math-inline');
+    expect(dom.innerHTML).toContain('katex');
+  });
+
+  test('MathWidget renders block math with display mode', () => {
+    const widget = new MathWidget('\\sum_{i=1}^n i = \\frac{n(n+1)}{2}', true);
+    const mockView = {} as any;
+    const dom = widget.toDOM(mockView);
+
+    expect(dom.tagName.toLowerCase()).toBe('div');
+    expect(dom.className).toBe('as-math-block');
+    expect(dom.innerHTML).toContain('katex');
+  });
+
+  test('mathPlugin decorates math when cursor is outside and unwraps when cursor is inside', () => {
+    const text = 'Formula is $a^2 + b^2 = c^2$ in geometry.';
+    // Cursor at end of doc (pos: text.length)
+    const state = EditorState.create({
+      doc: text,
+      selection: { anchor: text.length },
+      extensions: [mathPlugin],
+    });
+    const view = new EditorView({ state });
+
+    const pluginInstance = view.plugin(mathPlugin as any);
+    expect(pluginInstance).toBeDefined();
+    expect(pluginInstance!.decorations.size).toBe(1);
+
+    // Now move cursor inside formula (pos: 15)
+    view.dispatch({ selection: { anchor: 15 } });
+    const updatedInstance = view.plugin(mathPlugin as any);
+    expect(updatedInstance!.decorations.size).toBe(0); // unwrapped for editing!
   });
 });
 

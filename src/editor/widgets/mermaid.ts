@@ -123,6 +123,8 @@ interface MermaidWidgetState {
 }
 
 export class MermaidWidget extends MarkdownWidget {
+  override nodeName = 'FencedCode';
+
   updateDOM(dom: HTMLElement, _view: EditorView): boolean {
     const state = (dom as any).__mermaidState as MermaidWidgetState | undefined;
     if (state) {

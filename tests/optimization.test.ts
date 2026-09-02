@@ -1,10 +1,19 @@
-import { expect, test, describe } from 'bun:test';
+import { expect, test, describe, beforeAll } from 'bun:test';
+import { GlobalWindow } from 'happy-dom';
 import { computeWordCount, computeReadingTime, useWorkspaceStore } from '../src/app/stores/workspace';
 import { parseMarkdownTable, serializeMarkdownTable } from '../src/editor/widgets/table';
 import { findInlineSpans } from '../src/editor/decorations/delimiter-guard';
 import { formatDisplayName } from '../src/core/document/file-meta';
 import { syncDocumentHeading, extractDocumentHeading } from '../src/core/document/document';
-import { extractDocumentHeadings } from '../src/app/components/DocumentOutline';
+import { extractDocumentHeadings, findActiveHeading } from '../src/app/components/DocumentOutline';
+import { searchWorkspace } from '../src/core/search/full-text-search';
+import { exportToMarkdown, exportToHtml } from '../src/core/document/export';
+
+beforeAll(() => {
+  const window = new GlobalWindow();
+  (global as any).window = window;
+  (global as any).document = window.document;
+});
 
 describe('Fast Word Count & Reading Time', () => {
   test('Empty and whitespace-only strings return 0 words', () => {
@@ -182,7 +191,7 @@ describe('File Display Name & Rename Sanitization', () => {
     expect(useWorkspaceStore.getState().documents.find((d) => d.id === docId)?.meta.fileName).toBe('Sprint Planning.md');
   });
 
-  test('deleteDocument removes document and updates activeDocumentId or creates fresh note', () => {
+  test('deleteDocument moves document to trash and updates activeDocumentId or creates fresh note', () => {
     const store = useWorkspaceStore.getState();
     store.createEmptyDocument('Doc A.md');
     const docAId = useWorkspaceStore.getState().activeDocumentId!;
@@ -191,17 +200,19 @@ describe('File Display Name & Rename Sanitization', () => {
 
     expect(useWorkspaceStore.getState().documents.some((d) => d.id === docBId)).toBe(true);
 
-    // Delete doc B
+    // Soft-delete doc B to trash
     useWorkspaceStore.getState().deleteDocument(docBId);
-    expect(useWorkspaceStore.getState().documents.some((d) => d.id === docBId)).toBe(false);
+    expect(useWorkspaceStore.getState().documents.find((d) => d.id === docBId)?.deletedAt).toBeTruthy();
+    expect(useWorkspaceStore.getState().documents.filter((d) => !d.deletedAt).some((d) => d.id === docBId)).toBe(false);
 
-    // If all docs are deleted, a fresh empty doc is created automatically
-    const allIds = useWorkspaceStore.getState().documents.map((d) => d.id);
-    for (const id of allIds) {
+    // If all active docs are deleted, a fresh empty doc is created automatically
+    const allActiveIds = useWorkspaceStore.getState().documents.filter((d) => !d.deletedAt).map((d) => d.id);
+    for (const id of allActiveIds) {
       useWorkspaceStore.getState().deleteDocument(id);
     }
-    expect(useWorkspaceStore.getState().documents.length).toBe(1);
-    expect(useWorkspaceStore.getState().documents[0].meta.fileName).toBe('Untitled-1.md');
+    const remainingActive = useWorkspaceStore.getState().documents.filter((d) => !d.deletedAt);
+    expect(remainingActive.length).toBe(1);
+    expect(remainingActive[0].meta.fileName).toBe('Untitled-1.md');
   });
 });
 
@@ -252,11 +263,11 @@ describe('Hierarchical Folders and Subpages (Notion-Style)', () => {
     expect(useWorkspaceStore.getState().documents.some((d) => d.id === child1Id)).toBe(true);
     expect(useWorkspaceStore.getState().documents.some((d) => d.id === child2Id)).toBe(true);
 
-    // Deleting parent deletes all its child subpages
+    // Deleting parent soft-deletes all its child subpages to trash
     useWorkspaceStore.getState().deleteDocument(parentId);
-    expect(useWorkspaceStore.getState().documents.some((d) => d.id === parentId)).toBe(false);
-    expect(useWorkspaceStore.getState().documents.some((d) => d.id === child1Id)).toBe(false);
-    expect(useWorkspaceStore.getState().documents.some((d) => d.id === child2Id)).toBe(false);
+    expect(useWorkspaceStore.getState().documents.find((d) => d.id === parentId)?.deletedAt).toBeTruthy();
+    expect(useWorkspaceStore.getState().documents.find((d) => d.id === child1Id)?.deletedAt).toBeTruthy();
+    expect(useWorkspaceStore.getState().documents.find((d) => d.id === child2Id)?.deletedAt).toBeTruthy();
   });
 
   test('cascades deletion of folders and all contained subfolders & notes', () => {
@@ -270,11 +281,11 @@ describe('Hierarchical Folders and Subpages (Notion-Style)', () => {
     store.createEmptyDocument('Spec 1.md', specsFolder.id);
     const spec1Id = useWorkspaceStore.getState().activeDocumentId!;
 
-    // Delete root folder Alpha
+    // Delete root folder Alpha (soft-delete to trash)
     useWorkspaceStore.getState().deleteFolder(alphaFolder.id);
-    expect(useWorkspaceStore.getState().folders.some((f) => f.id === alphaFolder.id)).toBe(false);
-    expect(useWorkspaceStore.getState().folders.some((f) => f.id === specsFolder.id)).toBe(false);
-    expect(useWorkspaceStore.getState().documents.some((d) => d.id === spec1Id)).toBe(false);
+    expect(useWorkspaceStore.getState().folders.find((f) => f.id === alphaFolder.id)?.deletedAt).toBeTruthy();
+    expect(useWorkspaceStore.getState().folders.find((f) => f.id === specsFolder.id)?.deletedAt).toBeTruthy();
+    expect(useWorkspaceStore.getState().documents.find((d) => d.id === spec1Id)?.deletedAt).toBeTruthy();
   });
 
   test('toggleCollapse expands and collapses IDs', () => {
@@ -357,6 +368,204 @@ const x = '# Also not a heading';
   test('extractDocumentHeadings returns empty array for empty document', () => {
     expect(extractDocumentHeadings('')).toEqual([]);
     expect(extractDocumentHeadings('Just plain paragraphs\nNo headings at all')).toEqual([]);
+  });
+
+  test('findActiveHeading determines active section based on scroll/cursor line', () => {
+    const headings = [
+      { id: 'h-1', level: 1, text: 'Introduction', line: 1, pos: 0 },
+      { id: 'h-2', level: 2, text: 'Architecture', line: 15, pos: 150 },
+      { id: 'h-3', level: 2, text: 'API Specs', line: 40, pos: 450 },
+    ];
+
+    expect(findActiveHeading([], 10)).toBeNull();
+    // Line 1 is Introduction
+    expect(findActiveHeading(headings, 1)?.text).toBe('Introduction');
+    // Line 10 (between Intro and Architecture) is Introduction
+    expect(findActiveHeading(headings, 10)?.text).toBe('Introduction');
+    // Line 15 is Architecture
+    expect(findActiveHeading(headings, 15)?.text).toBe('Architecture');
+    // Line 25 is Architecture
+    expect(findActiveHeading(headings, 25)?.text).toBe('Architecture');
+    // Line 45 is API Specs
+    expect(findActiveHeading(headings, 45)?.text).toBe('API Specs');
+  });
+});
+
+describe('Full-Text Workspace Search Engine', () => {
+  const mockDocs: any[] = [
+    {
+      id: 'doc-1',
+      meta: { fileName: 'Meeting Notes.md' },
+      currentText: '# Meeting Notes\nDiscussed Q3 roadmap and Apollo engine integration.\nApproved budget.',
+    },
+    {
+      id: 'doc-2',
+      meta: { fileName: 'Architecture.md' },
+      currentText: '# Architecture\nFrontend uses CodeMirror 6 with hybrid markdown parsing.\nNo Apollo references here.',
+    },
+    {
+      id: 'doc-3',
+      meta: { fileName: 'Apollo Roadmap.md' },
+      currentText: '# Apollo Project\nApollo launcher specs and release date.',
+    },
+  ];
+
+  test('searchWorkspace finds body text matches with line numbers and snippets', () => {
+    const results = searchWorkspace(mockDocs, 'CodeMirror');
+    expect(results.length).toBe(1);
+    expect(results[0].docId).toBe('doc-2');
+    expect(results[0].snippets.length).toBe(1);
+    expect(results[0].snippets[0].line).toBe(2);
+    expect(results[0].snippets[0].snippet).toContain('CodeMirror');
+  });
+
+  test('searchWorkspace performs case-insensitive search', () => {
+    const lowerResults = searchWorkspace(mockDocs, 'apollo');
+    const upperResults = searchWorkspace(mockDocs, 'APOLLO');
+    expect(lowerResults.length).toBe(upperResults.length);
+    expect(lowerResults.length).toBe(3);
+  });
+
+  test('searchWorkspace prioritizes title matches', () => {
+    const results = searchWorkspace(mockDocs, 'Apollo');
+    expect(results[0].docId).toBe('doc-3'); // 'Apollo Roadmap.md' has title match
+    expect(results[0].titleMatches).toBe(true);
+  });
+
+  test('searchWorkspace returns empty array for blank query', () => {
+    expect(searchWorkspace(mockDocs, '')).toEqual([]);
+    expect(searchWorkspace(mockDocs, '   ')).toEqual([]);
+  });
+});
+
+describe('Sidebar Tree Drag and Drop & moveItem', () => {
+  test('moveItem moves note into folder and back to root', () => {
+    const store = useWorkspaceStore.getState();
+    store.createFolder('Engineering');
+    const folder = useWorkspaceStore.getState().folders.find((f) => f.name === 'Engineering')!;
+
+    store.createEmptyDocument('Sprint Planning.md', null);
+    const docId = useWorkspaceStore.getState().activeDocumentId!;
+
+    // Move doc into folder
+    useWorkspaceStore.getState().moveItem(docId, folder.id);
+    const movedDoc = useWorkspaceStore.getState().documents.find((d) => d.id === docId)!;
+    expect(movedDoc.parentId).toBe(folder.id);
+
+    // Move doc back to root
+    useWorkspaceStore.getState().moveItem(docId, null);
+    const rootDoc = useWorkspaceStore.getState().documents.find((d) => d.id === docId)!;
+    expect(rootDoc.parentId).toBeNull();
+  });
+
+  test('moveItem moves note to become a subpage of another note', () => {
+    const store = useWorkspaceStore.getState();
+    store.createEmptyDocument('Parent Note.md', null);
+    const parentId = useWorkspaceStore.getState().activeDocumentId!;
+
+    store.createEmptyDocument('Child Note.md', null);
+    const childId = useWorkspaceStore.getState().activeDocumentId!;
+
+    useWorkspaceStore.getState().moveItem(childId, parentId);
+    const childDoc = useWorkspaceStore.getState().documents.find((d) => d.id === childId)!;
+    expect(childDoc.parentId).toBe(parentId);
+  });
+
+  test('moveItem prevents moving folder into its own descendant', () => {
+    const store = useWorkspaceStore.getState();
+    store.createFolder('Folder A');
+    const folderA = useWorkspaceStore.getState().folders.find((f) => f.name === 'Folder A')!;
+
+    store.createFolder('Folder B', folderA.id);
+    const folderB = useWorkspaceStore.getState().folders.find((f) => f.name === 'Folder B')!;
+
+    // Try to move folder A into its own child folder B (cycle!)
+    useWorkspaceStore.getState().moveItem(folderA.id, folderB.id);
+    const folderAAfter = useWorkspaceStore.getState().folders.find((f) => f.id === folderA.id)!;
+    expect(folderAAfter.parentId).toBeNull(); // remains at root
+  });
+});
+
+describe('Export Utilities (Markdown, HTML, PDF)', () => {
+  test('exportToMarkdown creates download anchor with correct filename', () => {
+    let clickedHref = '';
+    let clickedDownload = '';
+
+    const origCreateElement = document.createElement.bind(document);
+    document.createElement = (tag: string) => {
+      const el = origCreateElement(tag);
+      if (tag === 'a') {
+        el.click = () => {
+          clickedHref = el.getAttribute('href') || '';
+          clickedDownload = el.getAttribute('download') || '';
+        };
+      }
+      return el;
+    };
+
+    exportToMarkdown('Design Specs', '# Hello World');
+    expect(clickedDownload).toBe('Design Specs.md');
+    expect(clickedHref).toBeDefined();
+
+    document.createElement = origCreateElement;
+  });
+
+  test('exportToHtml creates download anchor with html extension and escaped content', () => {
+    let clickedDownload = '';
+
+    const origCreateElement = document.createElement.bind(document);
+    document.createElement = (tag: string) => {
+      const el = origCreateElement(tag);
+      if (tag === 'a') {
+        el.click = () => {
+          clickedDownload = el.getAttribute('download') || '';
+        };
+      }
+      return el;
+    };
+
+    exportToHtml('Release Notes.md', '# Release v0.2.0\n<script>alert(1)</script>');
+    expect(clickedDownload).toBe('Release Notes.html');
+
+    document.createElement = origCreateElement;
+  });
+});
+
+describe('Trash & Recovery Bin', () => {
+  test('restoreItem restores soft-deleted document back to active list', () => {
+    const store = useWorkspaceStore.getState();
+    store.createEmptyDocument('Important Note.md', null);
+    const noteId = useWorkspaceStore.getState().activeDocumentId!;
+
+    // Soft-delete
+    useWorkspaceStore.getState().deleteDocument(noteId);
+    expect(useWorkspaceStore.getState().documents.find((d) => d.id === noteId)?.deletedAt).toBeTruthy();
+
+    // Restore
+    useWorkspaceStore.getState().restoreItem(noteId);
+    const restoredDoc = useWorkspaceStore.getState().documents.find((d) => d.id === noteId)!;
+    expect(restoredDoc.deletedAt).toBeNull();
+    expect(useWorkspaceStore.getState().activeDocumentId).toBe(noteId);
+  });
+
+  test('permanentDeleteItem removes item completely from store', () => {
+    const store = useWorkspaceStore.getState();
+    store.createEmptyDocument('Ephemeral Note.md', null);
+    const noteId = useWorkspaceStore.getState().activeDocumentId!;
+
+    useWorkspaceStore.getState().permanentDeleteItem(noteId);
+    expect(useWorkspaceStore.getState().documents.some((d) => d.id === noteId)).toBe(false);
+  });
+
+  test('emptyTrash wipes all soft-deleted documents and folders', () => {
+    const store = useWorkspaceStore.getState();
+    store.createEmptyDocument('Trash Me.md', null);
+    const noteId = useWorkspaceStore.getState().activeDocumentId!;
+    useWorkspaceStore.getState().deleteDocument(noteId);
+
+    expect(useWorkspaceStore.getState().documents.some((d) => d.deletedAt)).toBe(true);
+    useWorkspaceStore.getState().emptyTrash();
+    expect(useWorkspaceStore.getState().documents.some((d) => d.deletedAt)).toBe(false);
   });
 });
 

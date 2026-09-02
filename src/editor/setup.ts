@@ -1,11 +1,12 @@
 import { EditorState, Extension, Prec } from '@codemirror/state';
 import { EditorView, keymap, drawSelection, dropCursor } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
-import { syntaxTree } from '@codemirror/language';
+import { syntaxTree, codeFolding, foldGutter, foldKeymap } from '@codemirror/language';
 import { createMarkdownExtension } from '../core/markdown/grammar';
 import { getModeExtensions, ViewMode } from './modes/view-mode';
 import { markdownFormattingKeymap } from './commands/formatting';
 import { delimiterGuard } from './decorations/delimiter-guard';
+import { wikilinkAutocompleteExtension } from './completions/wikilink-completion';
 
 export interface EditorSetupOptions {
   initialDoc?: string;
@@ -278,6 +279,8 @@ export function createEditorExtensions(options: EditorSetupOptions = {}): Extens
   });
 
   return [
+    codeFolding(),
+    foldGutter(),
     history(),
     drawSelection(),
     dropCursor(),
@@ -287,9 +290,10 @@ export function createEditorExtensions(options: EditorSetupOptions = {}): Extens
     imagePasteDropExtension(),
     smartPasteLinkExtension(),
     clickLinkExtension(),
+    wikilinkAutocompleteExtension,
     updateListener,
     Prec.highest(keymap.of(markdownFormattingKeymap)),
-    keymap.of([...defaultKeymap, ...historyKeymap]),
+    keymap.of([...defaultKeymap, ...historyKeymap, ...foldKeymap]),
     EditorView.lineWrapping,
   ];
 }

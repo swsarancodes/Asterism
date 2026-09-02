@@ -115,6 +115,9 @@ export interface WorkspaceState {
   setActiveDocument: (id: string) => void;
   closeDocument: (id: string) => void;
   deleteDocument: (id: string) => void;
+  restoreItem: (id: string) => void;
+  permanentDeleteItem: (id: string) => void;
+  emptyTrash: () => void;
   updateDocumentContent: (id: string, newContent: string) => void;
   renameDocument: (id: string, newName: string) => void;
   markDocumentSaved: (id: string, newPath?: string) => void;
@@ -256,24 +259,35 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             for (const s of subs) allDocIdsToDelete.add(s);
           }
 
-          const remainingFolders = state.folders.filter((f) => !folderIdsToDelete.has(f.id));
-          const remainingDocs = state.documents.filter((d) => !allDocIdsToDelete.has(d.id));
+          const now = new Date().toISOString();
+          const nextFolders = state.folders.map((f) =>
+            folderIdsToDelete.has(f.id) ? { ...f, deletedAt: now } : f
+          );
+          const nextDocs = state.documents.map((d) =>
+            allDocIdsToDelete.has(d.id) ? { ...d, deletedAt: now } : d
+          );
 
-          let nextDocs = remainingDocs;
+          const activeRemainingDocs = nextDocs.filter((d) => !d.deletedAt);
           let nextActive = state.activeDocumentId;
 
-          if (remainingDocs.length === 0) {
+          if (activeRemainingDocs.length === 0) {
             const fresh = createDocumentState('', null);
             fresh.meta.fileName = 'Untitled-1.md';
-            nextDocs = [fresh];
-            nextActive = fresh.id;
+            return {
+              folders: nextFolders,
+              documents: [...nextDocs, fresh],
+              activeDocumentId: fresh.id,
+              wordCount: 0,
+              charCount: 0,
+              readingTimeMin: 0,
+            };
           } else if (allDocIdsToDelete.has(state.activeDocumentId || '')) {
-            nextActive = remainingDocs[0]?.id ?? null;
+            nextActive = activeRemainingDocs[0]?.id ?? null;
           }
 
-          const activeDoc = nextDocs.find((d) => d.id === nextActive);
+          const activeDoc = activeRemainingDocs.find((d) => d.id === nextActive);
           return {
-            folders: remainingFolders,
+            folders: nextFolders,
             documents: nextDocs,
             activeDocumentId: nextActive,
             wordCount: activeDoc ? computeWordCount(activeDoc.currentText) : 0,
@@ -358,12 +372,17 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           const descendantDocIds = getDescendantDocIds(id, state.documents);
           const idsToDelete = new Set([id, ...descendantDocIds]);
 
-          const remaining = state.documents.filter((d) => !idsToDelete.has(d.id));
-          if (remaining.length === 0) {
+          const now = new Date().toISOString();
+          const nextDocs = state.documents.map((d) =>
+            idsToDelete.has(d.id) ? { ...d, deletedAt: now } : d
+          );
+
+          const activeRemaining = nextDocs.filter((d) => !d.deletedAt);
+          if (activeRemaining.length === 0) {
             const fresh = createDocumentState('', null);
             fresh.meta.fileName = 'Untitled-1.md';
             return {
-              documents: [fresh],
+              documents: [...nextDocs, fresh],
               activeDocumentId: fresh.id,
               wordCount: 0,
               charCount: 0,
@@ -371,17 +390,115 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             };
           }
           const nextActive = idsToDelete.has(state.activeDocumentId || '')
-            ? (remaining[0]?.id ?? null)
+            ? (activeRemaining[0]?.id ?? null)
             : state.activeDocumentId;
-          const activeDoc = remaining.find((d) => d.id === nextActive);
+          const activeDoc = activeRemaining.find((d) => d.id === nextActive);
           return {
-            documents: remaining,
+            documents: nextDocs,
             activeDocumentId: nextActive,
             wordCount: activeDoc ? computeWordCount(activeDoc.currentText) : 0,
             charCount: activeDoc ? activeDoc.currentText.length : 0,
             readingTimeMin: activeDoc ? computeReadingTime(computeWordCount(activeDoc.currentText)) : 0,
           };
         });
+      },
+
+      restoreItem: (id: string) => {
+        set((state) => {
+          const nowDoc = state.documents.find((d) => d.id === id);
+          if (nowDoc) {
+            const descendantDocIds = getDescendantDocIds(id, state.documents);
+            const idsToRestore = new Set([id, ...descendantDocIds]);
+
+            const parentIsDeleted =
+              state.documents.some((d) => d.id === nowDoc.parentId && d.deletedAt) ||
+              state.folders.some((f) => f.id === nowDoc.parentId && f.deletedAt);
+            const nextParentId = parentIsDeleted ? null : nowDoc.parentId;
+
+            const nextDocs = state.documents.map((d) => {
+              if (d.id === id) return { ...d, deletedAt: null, parentId: nextParentId };
+              if (idsToRestore.has(d.id)) return { ...d, deletedAt: null };
+              return d;
+            });
+
+            return {
+              documents: nextDocs,
+              activeDocumentId: id,
+            };
+          }
+
+          const nowFolder = state.folders.find((f) => f.id === id);
+          if (nowFolder) {
+            const descendantFolderIds = getDescendantFolderIds(id, state.folders);
+            const folderIdsToRestore = new Set([id, ...descendantFolderIds]);
+
+            const parentIsDeleted = state.folders.some(
+              (f) => f.id === nowFolder.parentId && f.deletedAt
+            );
+            const nextParentId = parentIsDeleted ? null : nowFolder.parentId;
+
+            const nextFolders = state.folders.map((f) => {
+              if (f.id === id) return { ...f, deletedAt: null, parentId: nextParentId };
+              if (folderIdsToRestore.has(f.id)) return { ...f, deletedAt: null };
+              return f;
+            });
+
+            const nextDocs = state.documents.map((d) => {
+              if (d.parentId && folderIdsToRestore.has(d.parentId)) {
+                return { ...d, deletedAt: null };
+              }
+              return d;
+            });
+
+            return {
+              folders: nextFolders,
+              documents: nextDocs,
+            };
+          }
+
+          return state;
+        });
+      },
+
+      permanentDeleteItem: (id: string) => {
+        set((state) => {
+          const isFolder = state.folders.some((f) => f.id === id);
+          if (isFolder) {
+            const descendantFolderIds = getDescendantFolderIds(id, state.folders);
+            const folderIdsToDelete = new Set([id, ...descendantFolderIds]);
+
+            const docIdsInFolders = new Set<string>();
+            for (const doc of state.documents) {
+              if (doc.parentId && folderIdsToDelete.has(doc.parentId)) {
+                docIdsInFolders.add(doc.id);
+              }
+            }
+            const allDocIdsToDelete = new Set<string>();
+            for (const docId of docIdsInFolders) {
+              allDocIdsToDelete.add(docId);
+              const subs = getDescendantDocIds(docId, state.documents);
+              for (const s of subs) allDocIdsToDelete.add(s);
+            }
+
+            return {
+              folders: state.folders.filter((f) => !folderIdsToDelete.has(f.id)),
+              documents: state.documents.filter((d) => !allDocIdsToDelete.has(d.id)),
+            };
+          }
+
+          const descendantDocIds = getDescendantDocIds(id, state.documents);
+          const idsToDelete = new Set([id, ...descendantDocIds]);
+          return {
+            documents: state.documents.filter((d) => !idsToDelete.has(d.id)),
+          };
+        });
+      },
+
+      emptyTrash: () => {
+        set((state) => ({
+          folders: state.folders.filter((f) => !f.deletedAt),
+          documents: state.documents.filter((d) => !d.deletedAt),
+        }));
       },
 
       renameDocument: (id: string, newName: string) => {

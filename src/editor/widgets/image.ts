@@ -25,6 +25,7 @@ export function serializeImageMarkdown(alt: string, url: string, title?: string)
 }
 
 export class ImageWidget extends MarkdownWidget {
+  override nodeName = 'Image';
   private parsed: ParsedImage;
 
   constructor(

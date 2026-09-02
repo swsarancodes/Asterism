@@ -6,6 +6,7 @@ import { EditorPane } from './app/components/EditorPane';
 import { DocumentOutline } from './app/components/DocumentOutline';
 import { StatusBar } from './app/components/StatusBar';
 import { CommandPalette } from './app/components/CommandPalette';
+import { FullTextSearchModal } from './app/components/FullTextSearchModal';
 import './editor/theme/base.css';
 
 export const App: React.FC = () => {
@@ -72,6 +73,9 @@ export const App: React.FC = () => {
 
       {/* Command Palette (⌘K) */}
       <CommandPalette />
+
+      {/* Full-Text Workspace Search (⌘⇧F) */}
+      <FullTextSearchModal />
     </div>
   );
 };

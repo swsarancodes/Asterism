@@ -189,6 +189,104 @@
   transition: opacity var(--as-transition-fast), text-decoration var(--as-transition-fast);
 }
 
+/* Wikilink Interactive Pills */
+.as-wikilink-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  margin: 0 2px;
+  border-radius: var(--as-radius-sm, 4px);
+  background-color: var(--as-bg-subtle);
+  border: 1px solid var(--as-border-subtle);
+  color: var(--as-accent);
+  font-size: 0.9em;
+  font-weight: 500;
+  cursor: pointer;
+  vertical-align: baseline;
+  text-decoration: none;
+  transition: all var(--as-transition-fast);
+  user-select: none;
+}
+
+.as-wikilink-pill:hover {
+  background-color: var(--as-bg-hover);
+  text-decoration: underline;
+}
+
+/* Fold Gutter & Placeholder */
+.cm-foldGutter {
+  width: 14px;
+  opacity: 0.4;
+  transition: opacity var(--as-transition-fast);
+}
+
+.cm-foldGutter:hover {
+  opacity: 1;
+}
+
+.cm-foldGutter .cm-gutterElement {
+  cursor: pointer;
+  color: var(--as-text-muted);
+  transition: color var(--as-transition-fast);
+}
+
+.cm-foldGutter .cm-gutterElement:hover {
+  color: var(--as-accent);
+}
+
+.cm-foldPlaceholder {
+  background-color: var(--as-bg-subtle);
+  border: 1px solid var(--as-border-subtle);
+  color: var(--as-text-muted);
+  border-radius: 4px;
+  padding: 0 5px;
+  margin: 0 4px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--as-transition-fast);
+}
+
+.cm-foldPlaceholder:hover {
+  background-color: var(--as-bg-hover);
+  color: var(--as-text);
+  border-color: var(--as-border);
+}
+
+/* KaTeX Math Formula Rendering */
+.as-math-inline {
+  display: inline-block;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background-color: var(--as-bg-subtle, rgba(128, 128, 128, 0.06));
+  cursor: pointer;
+  vertical-align: baseline;
+  transition: background-color var(--as-transition-fast);
+}
+
+.as-math-inline:hover {
+  background-color: var(--as-bg-hover, rgba(128, 128, 128, 0.12));
+}
+
+.as-math-block {
+  display: block;
+  text-align: center;
+  padding: 12px 16px;
+  margin: 10px 0;
+  border-radius: var(--as-radius-md, 6px);
+  background-color: var(--as-bg-subtle, rgba(128, 128, 128, 0.05));
+  border: 1px solid var(--as-border-subtle, rgba(128, 128, 128, 0.1));
+  cursor: pointer;
+  overflow-x: auto;
+  transition: background-color var(--as-transition-fast), border-color var(--as-transition-fast);
+}
+
+.as-math-block:hover {
+  background-color: var(--as-bg-hover, rgba(128, 128, 128, 0.09));
+  border-color: var(--as-border);
+}
+
 
 /* Concealed Syntax Tokens */
 .as-syntax-hidden {
@@ -409,6 +507,68 @@
   background-color: var(--as-table-hover);
   box-shadow: inset 0 0 0 2px var(--as-accent);
   border-radius: 2px;
+}
+
+.as-table-th-actions {
+  width: 52px;
+  min-width: 52px;
+  max-width: 52px;
+  padding: 0 !important;
+  background-color: var(--as-table-header-bg);
+  border-bottom: 1px solid var(--as-border);
+}
+
+.as-table-cell-actions {
+  width: 52px;
+  min-width: 52px;
+  max-width: 52px;
+  padding: 4px 6px !important;
+  text-align: center;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--as-border);
+  user-select: none;
+}
+
+.as-table-row-action-btn {
+  opacity: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  font-size: 11px;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--as-text-muted);
+  cursor: pointer;
+  border-radius: var(--as-radius-sm);
+  margin: 0 1px;
+  transition: opacity var(--as-transition-fast), background-color var(--as-transition-fast), color var(--as-transition-fast);
+}
+
+.as-table tr:hover .as-table-row-action-btn {
+  opacity: 0.55;
+}
+
+.as-table-row-action-btn:hover {
+  opacity: 1 !important;
+  color: var(--as-text);
+  background-color: var(--as-bg-hover);
+}
+
+.as-table-row-action-del:hover {
+  opacity: 1 !important;
+  color: #ef4444;
+  background-color: rgba(239, 68, 68, 0.12);
+}
+
+.as-table-empty-td {
+  padding: 16px !important;
+  text-align: center;
+  color: var(--as-text-muted);
+  font-size: 13px;
+  border-bottom: none !important;
 }
 
 .as-table-content-wrapper {
@@ -756,4 +916,51 @@
   color: var(--as-text-dim);
   font-size: 10px;
 }
+
+/* Print & PDF Export Styling */
+@media print {
+  body, html {
+    background: #ffffff !important;
+    color: #111827 !important;
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  aside,
+  header,
+  nav,
+  .as-tabbar,
+  .as-statusbar,
+  .as-breadcrumbs,
+  .as-add-block-btn,
+  [role="dialog"],
+  button {
+    display: none !important;
+  }
+
+  .cm-editor {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .cm-scroller {
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  .cm-content {
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+
+  .as-table-widget,
+  .as-mermaid-widget,
+  .as-codeblock-widget,
+  .as-callout-widget,
+  .as-image-widget {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+}
+
 

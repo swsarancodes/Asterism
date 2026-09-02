@@ -17,12 +17,15 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { formatDisplayName } from '../../core/document/file-meta';
+import { TrashModal } from './TrashModal';
 
 export const Sidebar: React.FC = () => {
   const documents = useWorkspaceStore((s) => s.documents);
   const folders = useWorkspaceStore((s) => s.folders);
   const collapsedIds = useWorkspaceStore((s) => s.collapsedIds);
   const activeId = useWorkspaceStore((s) => s.activeDocumentId);
+
+  const [trashOpen, setTrashOpen] = useState(false);
   const setActiveDoc = useWorkspaceStore((s) => s.setActiveDocument);
   const deleteDoc = useWorkspaceStore((s) => s.deleteDocument);
   const createEmpty = useWorkspaceStore((s) => s.createEmptyDocument);
@@ -33,12 +36,17 @@ export const Sidebar: React.FC = () => {
   const renameFolder = useWorkspaceStore((s) => s.renameFolder);
   const deleteFolder = useWorkspaceStore((s) => s.deleteFolder);
   const toggleCollapse = useWorkspaceStore((s) => s.toggleCollapse);
+  const moveItem = useWorkspaceStore((s) => s.moveItem);
 
   const sidebarOpen = useSettingsStore((s) => s.sidebarOpen);
   const toggleSidebar = useSettingsStore((s) => s.toggleSidebar);
 
   const [query, setQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
+
+  // Drag and drop state
+  const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
 
   // Renaming state
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -116,6 +124,7 @@ serialization step. Saving is \`doc.toString()\` plus line-ending restoration.
   const isSearching = query.trim().length > 0;
   const filteredDocs = isSearching
     ? documents.filter((doc) => {
+        if (doc.deletedAt) return false;
         const q = query.trim().toLowerCase();
         return (
           doc.meta.fileName.toLowerCase().includes(q) ||
@@ -125,13 +134,13 @@ serialization step. Saving is \`doc.toString()\` plus line-ending restoration.
     : [];
 
   const filteredFolders = isSearching
-    ? folders.filter((f) => f.name.toLowerCase().includes(query.trim().toLowerCase()))
+    ? folders.filter((f) => !f.deletedAt && f.name.toLowerCase().includes(query.trim().toLowerCase()))
     : [];
 
   // Recursive Tree Node Renderer
   const renderTree = (parentId: string | null = null, depth: number = 0): React.ReactNode => {
-    const childFolders = folders.filter((f) => f.parentId === parentId);
-    const childDocs = documents.filter((d) => (d.parentId ?? null) === parentId);
+    const childFolders = folders.filter((f) => f.parentId === parentId && !f.deletedAt);
+    const childDocs = documents.filter((d) => (d.parentId ?? null) === parentId && !d.deletedAt);
 
     if (childFolders.length === 0 && childDocs.length === 0) {
       return null;
@@ -156,10 +165,41 @@ serialization step. Saving is \`doc.toString()\` plus line-ending restoration.
             documents.some((d) => d.parentId === folder.id);
           const isEditing = editingId === folder.id && editingType === 'folder';
 
+          const isDropTarget = dropTargetId === folder.id;
           return (
             <div key={`folder-${folder.id}`} style={{ display: 'flex', flexDirection: 'column' }}>
               <div
                 className="as-tree-node"
+                draggable={!isEditing}
+                onDragStart={(e) => {
+                  e.stopPropagation();
+                  e.dataTransfer.setData('text/plain', folder.id);
+                  setDraggedItemId(folder.id);
+                }}
+                onDragEnd={() => {
+                  setDraggedItemId(null);
+                  setDropTargetId(null);
+                }}
+                onDragOver={(e) => {
+                  if (draggedItemId && draggedItemId !== folder.id) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setDropTargetId(folder.id);
+                  }
+                }}
+                onDragLeave={(e) => {
+                  e.stopPropagation();
+                  if (dropTargetId === folder.id) setDropTargetId(null);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (draggedItemId && draggedItemId !== folder.id) {
+                    moveItem(draggedItemId, folder.id);
+                  }
+                  setDraggedItemId(null);
+                  setDropTargetId(null);
+                }}
                 onClick={() => toggleCollapse(folder.id)}
                 onDoubleClick={(e) => handleStartRename(folder.id, folder.name, 'folder', e)}
                 style={{
@@ -174,9 +214,16 @@ serialization step. Saving is \`doc.toString()\` plus line-ending restoration.
                   userSelect: 'none',
                   transition: 'background var(--as-transition-fast)',
                   position: 'relative',
+                  outline: isDropTarget ? '1.5px dashed var(--as-accent)' : 'none',
+                  outlineOffset: '-1px',
+                  backgroundColor: isDropTarget ? 'rgba(59, 130, 246, 0.12)' : 'transparent',
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--as-bg-hover)')}
-                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                onMouseEnter={(e) => {
+                  if (!isDropTarget) e.currentTarget.style.backgroundColor = 'var(--as-bg-hover)';
+                }}
+                onMouseLeave={(e) => {
+                  if (!isDropTarget) e.currentTarget.style.backgroundColor = 'transparent';
+                }}
               >
                 {/* Chevron expand/collapse */}
                 <button
@@ -377,10 +424,41 @@ serialization step. Saving is \`doc.toString()\` plus line-ending restoration.
           const hasSubpages = subpages.length > 0;
           const isCollapsed = collapsedIds.includes(doc.id);
 
+          const isDropTarget = dropTargetId === doc.id;
           return (
             <div key={`doc-${doc.id}`} style={{ display: 'flex', flexDirection: 'column' }}>
               <div
                 className="as-tree-node"
+                draggable={!isEditing}
+                onDragStart={(e) => {
+                  e.stopPropagation();
+                  e.dataTransfer.setData('text/plain', doc.id);
+                  setDraggedItemId(doc.id);
+                }}
+                onDragEnd={() => {
+                  setDraggedItemId(null);
+                  setDropTargetId(null);
+                }}
+                onDragOver={(e) => {
+                  if (draggedItemId && draggedItemId !== doc.id) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setDropTargetId(doc.id);
+                  }
+                }}
+                onDragLeave={(e) => {
+                  e.stopPropagation();
+                  if (dropTargetId === doc.id) setDropTargetId(null);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (draggedItemId && draggedItemId !== doc.id) {
+                    moveItem(draggedItemId, doc.id);
+                  }
+                  setDraggedItemId(null);
+                  setDropTargetId(null);
+                }}
                 onClick={() => setActiveDoc(doc.id)}
                 onDoubleClick={(e) => handleStartRename(doc.id, doc.meta.fileName, 'doc', e)}
                 style={{
@@ -392,17 +470,23 @@ serialization step. Saving is \`doc.toString()\` plus line-ending restoration.
                   fontSize: '13px',
                   fontWeight: isActive ? 600 : 400,
                   color: isActive ? 'var(--as-text)' : 'var(--as-text-muted)',
-                  backgroundColor: isActive ? 'var(--as-bg-subtle)' : 'transparent',
+                  backgroundColor: isDropTarget
+                    ? 'rgba(59, 130, 246, 0.12)'
+                    : isActive
+                    ? 'var(--as-bg-subtle)'
+                    : 'transparent',
                   cursor: 'pointer',
                   userSelect: 'none',
                   transition: 'background var(--as-transition-fast)',
                   position: 'relative',
+                  outline: isDropTarget ? '1.5px dashed var(--as-accent)' : 'none',
+                  outlineOffset: '-1px',
                 }}
                 onMouseEnter={(e) => {
-                  if (!isActive) e.currentTarget.style.backgroundColor = 'var(--as-bg-hover)';
+                  if (!isActive && !isDropTarget) e.currentTarget.style.backgroundColor = 'var(--as-bg-hover)';
                 }}
                 onMouseLeave={(e) => {
-                  if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
+                  if (!isActive && !isDropTarget) e.currentTarget.style.backgroundColor = 'transparent';
                 }}
               >
                 {/* Chevron for subpages */}
@@ -951,10 +1035,114 @@ serialization step. Saving is \`doc.toString()\` plus line-ending restoration.
                   No notes yet. Click + to create one.
                 </div>
               )}
+
+              {/* Root drop zone for un-nesting items to top level */}
+              <div
+                style={{
+                  minHeight: '40px',
+                  margin: '8px 0',
+                  padding: '6px',
+                  borderRadius: 'var(--as-radius-sm)',
+                  border: dropTargetId === 'root' ? '1.5px dashed var(--as-accent)' : '1.5px dashed transparent',
+                  backgroundColor: dropTargetId === 'root' ? 'rgba(59, 130, 246, 0.08)' : 'transparent',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all var(--as-transition-fast)',
+                }}
+                onDragOver={(e) => {
+                  if (draggedItemId) {
+                    e.preventDefault();
+                    setDropTargetId('root');
+                  }
+                }}
+                onDragLeave={() => {
+                  if (dropTargetId === 'root') setDropTargetId(null);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (draggedItemId) {
+                    moveItem(draggedItemId, null);
+                  }
+                  setDraggedItemId(null);
+                  setDropTargetId(null);
+                }}
+              >
+                {dropTargetId === 'root' && (
+                  <span style={{ fontSize: '11px', color: 'var(--as-accent)', fontWeight: 500 }}>
+                    Drop here to move to root
+                  </span>
+                )}
+              </div>
             </>
           )}
         </div>
+
+        {/* Bottom Sidebar Controls: Trash */}
+        <div
+          style={{
+            padding: '8px 12px',
+            borderTop: '1px solid var(--as-border-subtle)',
+            backgroundColor: 'var(--as-bg-surface)',
+          }}
+        >
+          {(() => {
+            const trashedCount =
+              documents.filter((d) => d.deletedAt).length +
+              folders.filter((f) => f.deletedAt).length;
+
+            return (
+              <button
+                type="button"
+                onClick={() => setTrashOpen(true)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  width: '100%',
+                  padding: '6px 8px',
+                  borderRadius: 'var(--as-radius-sm)',
+                  border: 'none',
+                  backgroundColor: 'transparent',
+                  color: 'var(--as-text-muted)',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  transition: 'all var(--as-transition-fast)',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--as-bg-hover)';
+                  e.currentTarget.style.color = 'var(--as-text)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.color = 'var(--as-text-muted)';
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Trash2 size={14} />
+                  <span>Trash</span>
+                </div>
+                {trashedCount > 0 && (
+                  <span
+                    style={{
+                      fontSize: '11px',
+                      padding: '1px 6px',
+                      borderRadius: '10px',
+                      backgroundColor: 'var(--as-bg-subtle)',
+                      color: 'var(--as-text-muted)',
+                    }}
+                  >
+                    {trashedCount}
+                  </span>
+                )}
+              </button>
+            );
+          })()}
+        </div>
       </div>
+
+      {/* Trash Recovery Modal */}
+      <TrashModal isOpen={trashOpen} onClose={() => setTrashOpen(false)} />
     </aside>
   );
 };

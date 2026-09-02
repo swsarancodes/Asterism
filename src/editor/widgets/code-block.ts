@@ -8,6 +8,8 @@ interface CodeBlockWidgetState {
 }
 
 export class CodeBlockWidget extends MarkdownWidget {
+  override nodeName = 'FencedCode';
+
   constructor(
     source: string,
     from: number,

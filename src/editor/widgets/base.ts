@@ -11,6 +11,8 @@ import { syntaxTree } from '@codemirror/language';
  * 4. ignoreEvent(): Allows native text selection and input controls inside widgets.
  */
 export abstract class MarkdownWidget extends WidgetType {
+  public nodeName?: string;
+
   constructor(
     public source: string,
     public from: number,
@@ -34,21 +36,58 @@ export abstract class MarkdownWidget extends WidgetType {
    * Resolves the current document range of this widget, preventing stale offset drift.
    */
   resolveRange(view: EditorView, dom?: HTMLElement | null): { from: number; to: number } {
+    const doc = view.state.doc;
+    const docLen = doc.length;
+
+    // 1. If [this.from, this.to] exactly matches this.source, verify if it's still accurate
+    if (
+      this.from >= 0 &&
+      this.to <= docLen &&
+      this.from <= this.to &&
+      doc.sliceString(this.from, this.to) === this.source
+    ) {
+      return { from: this.from, to: this.to };
+    }
+
+    // 2. Try resolving via DOM position and syntax tree
     if (dom && dom.isConnected) {
       try {
         const pos = view.posAtDOM(dom);
-        if (pos >= 0 && pos <= view.state.doc.length) {
+        if (pos >= 0 && pos <= docLen) {
           const tree = syntaxTree(view.state);
-          const node = tree.resolveInner(pos, 1);
-          if (node && node.from <= pos && node.to >= pos) {
-            return { from: node.from, to: node.to };
+          let curr: any = tree.resolveInner(pos, 1);
+          let found: { from: number; to: number } | null = null;
+          while (curr && curr.name !== 'Document') {
+            if (this.nodeName && curr.name === this.nodeName) {
+              found = { from: curr.from, to: curr.to };
+              break;
+            }
+            if (!this.nodeName && curr.parent && curr.parent.name === 'Document') {
+              found = { from: curr.from, to: curr.to };
+              break;
+            }
+            curr = curr.parent;
           }
+          if (!found && pos > 0) {
+            curr = tree.resolveInner(pos, -1);
+            while (curr && curr.name !== 'Document') {
+              if (this.nodeName && curr.name === this.nodeName) {
+                found = { from: curr.from, to: curr.to };
+                break;
+              }
+              if (!this.nodeName && curr.parent && curr.parent.name === 'Document') {
+                found = { from: curr.from, to: curr.to };
+                break;
+              }
+              curr = curr.parent;
+            }
+          }
+          if (found) return found;
         }
       } catch {
         // Fallback to recorded positions
       }
     }
-    const docLen = view.state.doc.length;
     const safeFrom = Math.max(0, Math.min(this.from, docLen));
     const safeTo = Math.max(safeFrom, Math.min(this.to, docLen));
     return { from: safeFrom, to: safeTo };
@@ -57,7 +96,7 @@ export abstract class MarkdownWidget extends WidgetType {
   /**
    * Safely dispatches replacement text to the document buffer.
    */
-  protected replace(view: EditorView, newText: string, dom?: HTMLElement | null) {
+  public replace(view: EditorView, newText: string, dom?: HTMLElement | null) {
     const range = this.resolveRange(view, dom);
     view.dispatch({
       changes: { from: range.from, to: range.to, insert: newText },

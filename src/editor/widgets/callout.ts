@@ -61,6 +61,8 @@ interface CalloutWidgetState {
 }
 
 export class CalloutWidget extends MarkdownWidget {
+  override nodeName = 'Blockquote';
+
   updateDOM(dom: HTMLElement, _view: EditorView): boolean {
     const state = (dom as any).__calloutState as CalloutWidgetState | undefined;
     if (state) {

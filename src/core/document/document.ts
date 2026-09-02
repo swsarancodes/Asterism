@@ -6,6 +6,7 @@ export interface FolderItem {
   name: string;
   parentId: string | null;
   createdAt: number;
+  deletedAt?: string | null;
 }
 
 export function generateFolderId(): string {
@@ -21,6 +22,7 @@ export function createFolderItem(name: string, parentId: string | null = null): 
     name: name.trim() || 'New Folder',
     parentId,
     createdAt: Date.now(),
+    deletedAt: null,
   };
 }
 
@@ -31,6 +33,7 @@ export interface DocumentState {
   currentText: string;
   isDirty: boolean;
   parentId?: string | null;
+  deletedAt?: string | null;
 }
 
 export function generateDocId(): string {

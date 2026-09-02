@@ -1,0 +1,134 @@
+import { Extension } from '@codemirror/state';
+import { ViewPlugin, ViewUpdate, EditorView, Decoration, DecorationSet, WidgetType } from '@codemirror/view';
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
+
+export class MathWidget extends WidgetType {
+  constructor(
+    readonly latex: string,
+    readonly displayMode: boolean
+  ) {
+    super();
+  }
+
+  eq(other: MathWidget) {
+    return this.latex === other.latex && this.displayMode === other.displayMode;
+  }
+
+  toDOM(view: EditorView) {
+    const isBlock = this.displayMode;
+    const container = document.createElement(isBlock ? 'div' : 'span');
+    container.className = isBlock ? 'as-math-block' : 'as-math-inline';
+    container.title = 'Click to edit LaTeX formula';
+
+    try {
+      const renderedHtml = katex.renderToString(this.latex.trim(), {
+        displayMode: isBlock,
+        throwOnError: false,
+      });
+      container.innerHTML = renderedHtml;
+    } catch {
+      container.textContent = `$${this.latex}$`;
+      container.style.color = '#ef4444';
+    }
+
+    container.addEventListener('click', (e) => {
+      const pos = view.posAtDOM(container);
+      if (typeof pos === 'number' && pos >= 0) {
+        e.preventDefault();
+        view.dispatch({
+          selection: { anchor: pos },
+        });
+        view.focus();
+      }
+    });
+
+    return container;
+  }
+
+  ignoreEvent(event: Event): boolean {
+    return event.type === 'click';
+  }
+}
+
+// Regex for block math: $$...$$
+const BLOCK_MATH_REGEX = /(\$\$)([\s\S]*?)(\$\$)/g;
+
+// Regex for inline math: $formula$ (ignores escaped dollars, empty $$, and currency like $50)
+const INLINE_MATH_REGEX = /(?<!\\|\$)(\$)(?!\s|\$)((?:[^\$\n]|\\\$)+?)(?<!\s|\\)(\$)(?!\d|\$)/g;
+
+export const mathPlugin = ViewPlugin.fromClass(
+  class {
+    decorations: DecorationSet;
+
+    constructor(view: EditorView) {
+      this.decorations = this.computeDecorations(view);
+    }
+
+    update(update: ViewUpdate) {
+      if (update.docChanged || update.selectionSet || update.viewportChanged) {
+        this.decorations = this.computeDecorations(update.view);
+      }
+    }
+
+    computeDecorations(view: EditorView): DecorationSet {
+      const widgets: any[] = [];
+      const cursor = view.state.selection.main.head;
+
+      for (const { from, to } of view.visibleRanges) {
+        const text = view.state.doc.sliceString(from, to);
+
+        // 1. Block Math ($$...$$)
+        BLOCK_MATH_REGEX.lastIndex = 0;
+        let blockMatch: RegExpExecArray | null;
+        const matchedBlockRanges: Array<{ start: number; end: number }> = [];
+
+        while ((blockMatch = BLOCK_MATH_REGEX.exec(text)) !== null) {
+          const start = from + blockMatch.index;
+          const end = start + blockMatch[0].length;
+          matchedBlockRanges.push({ start, end });
+
+          if (cursor < start || cursor > end) {
+            const formula = blockMatch[2];
+            widgets.push(
+              Decoration.replace({
+                widget: new MathWidget(formula, true),
+              }).range(start, end)
+            );
+          }
+        }
+
+        // 2. Inline Math ($formula$)
+        INLINE_MATH_REGEX.lastIndex = 0;
+        let inlineMatch: RegExpExecArray | null;
+
+        while ((inlineMatch = INLINE_MATH_REGEX.exec(text)) !== null) {
+          const start = from + inlineMatch.index;
+          const end = start + inlineMatch[0].length;
+
+          // Skip if inside a matched block math
+          const insideBlock = matchedBlockRanges.some(
+            (b) => start >= b.start && end <= b.end
+          );
+          if (insideBlock) continue;
+
+          if (cursor < start || cursor > end) {
+            const formula = inlineMatch[2];
+            widgets.push(
+              Decoration.replace({
+                widget: new MathWidget(formula, false),
+              }).range(start, end)
+            );
+          }
+        }
+      }
+
+      return Decoration.set(widgets, true);
+    }
+  },
+  {
+    decorations: (v) => v.decorations,
+  }
+);
+
+export const mathExtension: Extension = [mathPlugin];

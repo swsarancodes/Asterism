@@ -8,6 +8,7 @@ export interface SettingsState {
   mode: ViewMode;
   sidebarOpen: boolean;
   outlineOpen: boolean;
+  searchModalOpen: boolean;
   typewriterMode: boolean;
   focusMode: 'off' | 'sentence' | 'paragraph';
   fontSize: number;
@@ -17,6 +18,8 @@ export interface SettingsState {
   setMode: (mode: ViewMode) => void;
   toggleSidebar: () => void;
   toggleOutline: () => void;
+  setSearchModalOpen: (open: boolean) => void;
+  toggleSearchModal: () => void;
   toggleTypewriter: () => void;
   setFocusMode: (mode: 'off' | 'sentence' | 'paragraph') => void;
   setFontSize: (size: number) => void;
@@ -27,6 +30,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   mode: 'hybrid',
   sidebarOpen: true,
   outlineOpen: false,
+  searchModalOpen: false,
   typewriterMode: false,
   focusMode: 'off',
   fontSize: 16,
@@ -36,6 +40,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setMode: (mode) => set({ mode }),
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
   toggleOutline: () => set((state) => ({ outlineOpen: !state.outlineOpen })),
+  setSearchModalOpen: (searchModalOpen) => set({ searchModalOpen }),
+  toggleSearchModal: () => set((state) => ({ searchModalOpen: !state.searchModalOpen })),
   toggleTypewriter: () => set((state) => ({ typewriterMode: !state.typewriterMode })),
   setFocusMode: (focusMode) => set({ focusMode }),
   setFontSize: (fontSize) => set({ fontSize }),
