@@ -156,9 +156,9 @@ describe('File Display Name & Rename Sanitization', () => {
     expect(extractDocumentHeading('# My Project Notes\nBody text')).toBe('My Project Notes');
     expect(extractDocumentHeading('# **Bold Title**')).toBe('Bold Title');
     expect(extractDocumentHeading('---\ntitle: YAML\n---\n# Real Title\n\nContent')).toBe('Real Title');
-    expect(extractDocumentHeading('No heading at all\nJust text')).toBeNull();
+    expect(extractDocumentHeading('No heading at all\nJust text')).toBe('No heading at all');
     expect(extractDocumentHeading('# ')).toBeNull();
-    expect(extractDocumentHeading('## H2 Subheading')).toBeNull();
+    expect(extractDocumentHeading('- List item 1\n- List item 2')).toBeNull();
   });
 
   test('changing heading inside page reflects back in sidebar document fileName', () => {

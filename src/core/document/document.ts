@@ -71,40 +71,63 @@ export function syncDocumentHeading(text: string, title: string): string {
     return `${headingLine}\n\n`;
   }
 
-  // Check if text starts with YAML frontmatter
-  const frontmatterMatch = text.match(/^(---\r?\n[\s\S]*?\r?\n---(?:\r?\n)*)/);
-  if (frontmatterMatch) {
-    const fm = frontmatterMatch[1];
-    const rest = text.slice(fm.length);
-    if (/^#\s+[^\r\n]*/.test(rest)) {
-      return fm + rest.replace(/^#\s+[^\r\n]*/, headingLine);
-    } else {
-      return fm + `${headingLine}\n\n` + rest.replace(/^\r?\n*/, '');
+  // Check frontmatter
+  const frontmatterMatch = text.match(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n)*/);
+  const fm = frontmatterMatch ? frontmatterMatch[0] : '';
+  const body = frontmatterMatch ? text.slice(fm.length) : text;
+
+  // Find the first non-empty line in body
+  const lines = body.split(/\r?\n/);
+  let firstNonEmptyIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].trim()) {
+      firstNonEmptyIdx = i;
+      break;
     }
   }
 
-  // If text starts with an H1 heading
-  if (/^#\s+[^\r\n]*/.test(text)) {
-    return text.replace(/^#\s+[^\r\n]*/, headingLine);
+  if (firstNonEmptyIdx !== -1) {
+    const firstLine = lines[firstNonEmptyIdx].trim();
+    // If first non-empty line starts with '#' OR is a plain title line (not a list, quote, code, table, hr):
+    if (firstLine.startsWith('#') || !firstLine.match(/^([-*+]|\d+\.|>|```|---|===|\|)/)) {
+      lines[firstNonEmptyIdx] = headingLine;
+      return fm + lines.join('\n');
+    }
   }
 
-  // Otherwise, prepend heading
-  return `${headingLine}\n\n` + text.replace(/^\r?\n*/, '');
+  // Otherwise (e.g. document starts directly with a list or table), prepend heading
+  return `${fm}${headingLine}\n\n${body.replace(/^\r?\n*/, '')}`;
 }
 
 export function extractDocumentHeading(text: string): string | null {
+  if (!text.trim()) return null;
+
   // Check frontmatter
   const frontmatterMatch = text.match(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n)*/);
   const body = frontmatterMatch ? text.slice(frontmatterMatch[0].length) : text;
 
-  // Match the first H1 heading line
-  const headingMatch = body.match(/^#\s+([^\r\n]+)/m);
-  if (!headingMatch) return null;
+  // 1. Look for explicit H1 heading anywhere near the top: # Heading
+  const h1Match = body.match(/^#\s+([^\r\n]+)/m);
+  if (h1Match) {
+    const clean = h1Match[1].replace(/[*_~`]/g, '').trim();
+    if (clean) return clean;
+  }
 
-  const headingText = headingMatch[1].trim();
-  // Strip inline formatting like bold or code spans
-  const cleanTitle = headingText.replace(/[*_~`]/g, '').trim();
-  return cleanTitle || null;
+  // 2. If no # heading found, find the first non-empty line
+  const lines = body.split(/\r?\n/);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    // Don't treat markdown syntax (lists, quotes, code blocks, dividers, tables) as a title
+    if (trimmed.match(/^([-*+]|\d+\.|>|```|---|===|\||\[[ xX]\])/)) {
+      break;
+    }
+    const clean = trimmed.replace(/^#+\s*/, '').replace(/[*_~`]/g, '').trim();
+    if (clean && clean.length <= 120) {
+      return clean;
+    }
+    break;
+  }
+
+  return null;
 }
-
-
