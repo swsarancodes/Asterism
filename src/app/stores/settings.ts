@@ -7,6 +7,7 @@ export interface SettingsState {
   theme: AppTheme;
   mode: ViewMode;
   sidebarOpen: boolean;
+  outlineOpen: boolean;
   typewriterMode: boolean;
   focusMode: 'off' | 'sentence' | 'paragraph';
   fontSize: number;
@@ -15,6 +16,7 @@ export interface SettingsState {
   setTheme: (theme: AppTheme) => void;
   setMode: (mode: ViewMode) => void;
   toggleSidebar: () => void;
+  toggleOutline: () => void;
   toggleTypewriter: () => void;
   setFocusMode: (mode: 'off' | 'sentence' | 'paragraph') => void;
   setFontSize: (size: number) => void;
@@ -24,6 +26,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   theme: 'light',
   mode: 'hybrid',
   sidebarOpen: true,
+  outlineOpen: false,
   typewriterMode: false,
   focusMode: 'off',
   fontSize: 16,
@@ -32,6 +35,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setTheme: (theme) => set({ theme }),
   setMode: (mode) => set({ mode }),
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+  toggleOutline: () => set((state) => ({ outlineOpen: !state.outlineOpen })),
   toggleTypewriter: () => set((state) => ({ typewriterMode: !state.typewriterMode })),
   setFocusMode: (focusMode) => set({ focusMode }),
   setFontSize: (fontSize) => set({ fontSize }),

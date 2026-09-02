@@ -1,0 +1,263 @@
+import React, { useMemo } from 'react';
+import { useWorkspaceStore } from '../stores/workspace';
+import { useSettingsStore } from '../stores/settings';
+import { ListTree, X, FileText, Clock, Hash } from 'lucide-react';
+
+export interface DocumentHeading {
+  id: string;
+  level: number;
+  text: string;
+  line: number;
+  pos: number;
+}
+
+export function extractDocumentHeadings(markdown: string): DocumentHeading[] {
+  if (!markdown) return [];
+  const headings: DocumentHeading[] = [];
+  const lines = markdown.split(/\r?\n/);
+  let inCodeBlock = false;
+  let charOffset = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const lineText = lines[i];
+    const trimmed = lineText.trim();
+
+    if (trimmed.startsWith('```')) {
+      inCodeBlock = !inCodeBlock;
+      charOffset += lineText.length + 1;
+      continue;
+    }
+
+    if (!inCodeBlock) {
+      const match = lineText.match(/^(#{1,6})\s+([^\r\n]+)/);
+      if (match) {
+        const level = match[1].length;
+        const raw = match[2].trim();
+        const clean = raw.replace(/[*_~`]/g, '').trim();
+        if (clean) {
+          headings.push({
+            id: `heading-${i}-${charOffset}`,
+            level,
+            text: clean,
+            line: i + 1,
+            pos: charOffset,
+          });
+        }
+      }
+    }
+    charOffset += lineText.length + 1;
+  }
+
+  return headings;
+}
+
+export const DocumentOutline: React.FC = () => {
+  const activeId = useWorkspaceStore((s) => s.activeDocumentId);
+  const documents = useWorkspaceStore((s) => s.documents);
+  const wordCount = useWorkspaceStore((s) => s.wordCount);
+  const readingTimeMin = useWorkspaceStore((s) => s.readingTimeMin);
+  const outlineOpen = useSettingsStore((s) => s.outlineOpen);
+  const toggleOutline = useSettingsStore((s) => s.toggleOutline);
+
+  const currentDoc = documents.find((d) => d.id === activeId);
+  const headings = useMemo(() => {
+    return currentDoc ? extractDocumentHeadings(currentDoc.currentText) : [];
+  }, [currentDoc?.currentText]);
+
+  if (!outlineOpen) return null;
+
+  const handleHeadingClick = (heading: DocumentHeading) => {
+    window.dispatchEvent(
+      new CustomEvent('as:scroll-to-line', {
+        detail: { line: heading.line, pos: heading.pos },
+      })
+    );
+  };
+
+  return (
+    <aside
+      aria-label="Document Outline"
+      style={{
+        width: '260px',
+        height: '100%',
+        backgroundColor: 'var(--as-bg-surface)',
+        borderLeft: '1px solid var(--as-border)',
+        display: 'flex',
+        flexDirection: 'column',
+        flexShrink: 0,
+        userSelect: 'none',
+        zIndex: 10,
+        animation: 'fadeIn 0.15s ease',
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '12px 14px',
+          borderBottom: '1px solid var(--as-border-subtle)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <ListTree size={16} style={{ color: 'var(--as-accent)' }} />
+          <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--as-text)' }}>
+            Outline
+          </span>
+          <span
+            style={{
+              fontSize: '11px',
+              padding: '1px 6px',
+              borderRadius: '10px',
+              backgroundColor: 'var(--as-bg-subtle)',
+              color: 'var(--as-text-muted)',
+            }}
+          >
+            {headings.length}
+          </span>
+        </div>
+
+        <button
+          type="button"
+          onClick={toggleOutline}
+          title="Close Outline (⌘⇧O)"
+          style={{
+            background: 'none',
+            border: 'none',
+            padding: '4px',
+            cursor: 'pointer',
+            borderRadius: '4px',
+            color: 'var(--as-text-muted)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = 'var(--as-bg-hover)';
+            e.currentTarget.style.color = 'var(--as-text)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = 'transparent';
+            e.currentTarget.style.color = 'var(--as-text-muted)';
+          }}
+        >
+          <X size={15} />
+        </button>
+      </div>
+
+      {/* Headings List */}
+      <div
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: '8px 6px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '2px',
+        }}
+      >
+        {headings.length === 0 ? (
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: '180px',
+              textAlign: 'center',
+              padding: '0 20px',
+              color: 'var(--as-text-muted)',
+              fontSize: '12px',
+              lineHeight: 1.5,
+            }}
+          >
+            <Hash size={24} style={{ opacity: 0.3, marginBottom: '8px' }} />
+            <span>No headings detected</span>
+            <span style={{ fontSize: '11px', opacity: 0.7, marginTop: '4px' }}>
+              Add #, ##, or ### to structure your document sections.
+            </span>
+          </div>
+        ) : (
+          headings.map((heading) => {
+            const indent = (heading.level - 1) * 12;
+            const fontWeight = heading.level === 1 ? 600 : heading.level === 2 ? 500 : 400;
+            const opacity = heading.level === 1 ? 1 : heading.level === 2 ? 0.9 : 0.75;
+
+            return (
+              <div
+                key={heading.id}
+                onClick={() => handleHeadingClick(heading)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '5px 8px',
+                  paddingLeft: `${8 + indent}px`,
+                  borderRadius: 'var(--as-radius-sm)',
+                  fontSize: '12.5px',
+                  fontWeight,
+                  color: 'var(--as-text)',
+                  opacity,
+                  cursor: 'pointer',
+                  transition: 'background-color var(--as-transition-fast)',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--as-bg-hover)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                }}
+                title={`Line ${heading.line}: ${heading.text}`}
+              >
+                <span
+                  style={{
+                    display: 'inline-block',
+                    width: heading.level === 1 ? '6px' : '4px',
+                    height: heading.level === 1 ? '6px' : '4px',
+                    borderRadius: '50%',
+                    backgroundColor: heading.level === 1 ? 'var(--as-accent)' : 'var(--as-text-muted)',
+                    flexShrink: 0,
+                    opacity: 0.8,
+                  }}
+                />
+                <span
+                  style={{
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {heading.text}
+                </span>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Footer Metrics */}
+      <div
+        style={{
+          padding: '10px 14px',
+          borderTop: '1px solid var(--as-border-subtle)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          fontSize: '11px',
+          color: 'var(--as-text-muted)',
+          backgroundColor: 'var(--as-bg-subtle)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <FileText size={12} />
+          <span>{wordCount} words</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <Clock size={12} />
+          <span>{readingTimeMin} min read</span>
+        </div>
+      </div>
+    </aside>
+  );
+};

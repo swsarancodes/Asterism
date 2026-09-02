@@ -37,17 +37,22 @@ class TaskCheckboxWidget extends WidgetType {
     input.checked = this.checked;
     input.className = 'as-task-checkbox';
 
-    input.addEventListener('change', (e) => {
+    const toggle = (e: Event) => {
+      e.preventDefault();
       e.stopPropagation();
       const line = view.state.doc.lineAt(this.pos);
       const match = line.text.match(/^(\s*-\s*\[)([ xX])(\]\s*)/);
       if (match) {
         const checkPos = line.from + match[1].length;
+        const nextChar = this.checked ? ' ' : 'x';
         view.dispatch({
-          changes: { from: checkPos, to: checkPos + 1, insert: input.checked ? 'x' : ' ' },
+          changes: { from: checkPos, to: checkPos + 1, insert: nextChar },
         });
       }
-    });
+    };
+
+    input.addEventListener('click', toggle);
+    input.addEventListener('change', toggle);
 
     wrapper.appendChild(input);
     return wrapper;
@@ -73,7 +78,7 @@ export function buildListDecorations(view: EditorView): DecorationSet {
       const text = line.text;
 
       // 1. Task list item: - [ ] or - [x]
-      const taskMatch = text.match(/^(\s*)-\s*\[([ xX])\]\s+/);
+      const taskMatch = text.match(/^(\s*)-\s*\[([ xX])\](\s+|$)/);
       if (taskMatch) {
         const indentLen = taskMatch[1].length;
         const markerStart = line.from + indentLen;
@@ -87,6 +92,15 @@ export function buildListDecorations(view: EditorView): DecorationSet {
             widget: new TaskCheckboxWidget(isChecked, line.from),
           }),
         });
+
+        // Completed task strikethrough styling on remaining text
+        if (isChecked && markerEnd < line.to) {
+          listItems.push({
+            from: markerEnd,
+            to: line.to,
+            deco: Decoration.mark({ class: 'as-task-checked-text' }),
+          });
+        }
       }
       // 2. Bullet list item: - item or * item (not task)
       else {

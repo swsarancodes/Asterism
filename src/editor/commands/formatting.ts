@@ -303,6 +303,39 @@ export function setTaskList(view: EditorView, range?: { from: number; to: number
 }
 
 /**
+ * Toggles the checked status of a task item (- [ ] <-> - [x]) at the cursor.
+ * If the current line is a regular bullet list item (- or *), converts it to a task item (- [ ]).
+ */
+export function toggleTaskCompletion(view: EditorView): boolean {
+  const { state } = view;
+  const sel = state.selection.main;
+  const line = state.doc.lineAt(sel.from);
+  const match = line.text.match(/^(\s*-\s*\[)([ xX])(\]\s*)/);
+
+  if (match) {
+    const isChecked = match[2].toLowerCase() === 'x';
+    const newChar = isChecked ? ' ' : 'x';
+    const checkPos = line.from + match[1].length;
+    view.dispatch({
+      changes: { from: checkPos, to: checkPos + 1, insert: newChar },
+    });
+    return true;
+  }
+
+  // If on a regular bullet list item (- or *), upgrade to task item
+  const bulletMatch = line.text.match(/^(\s*)([-*])\s+/);
+  if (bulletMatch) {
+    const indent = bulletMatch[1];
+    view.dispatch({
+      changes: { from: line.from, to: line.from + bulletMatch[0].length, insert: `${indent}- [ ] ` },
+    });
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Formats all selected lines into a quote / blockquote (> item)
  */
 export function setBlockquote(view: EditorView) {
@@ -671,6 +704,10 @@ export const markdownFormattingKeymap: KeyBinding[] = [
       setTaskList(view);
       return true;
     },
+  },
+  {
+    key: 'Mod-Enter',
+    run: (view) => toggleTaskCompletion(view),
   },
   {
     key: 'Enter',

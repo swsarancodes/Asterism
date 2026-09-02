@@ -267,6 +267,26 @@ export const EditorPane: React.FC<EditorPaneProps> = ({ modeOverride }) => {
     }
   }, [currentDoc?.currentText]);
 
+  // Handle click-to-scroll navigation from Document Outline
+  useEffect(() => {
+    const handleScrollToHeading = (e: Event) => {
+      const customEvent = e as CustomEvent<{ line: number; pos: number }>;
+      const view = viewRef.current;
+      if (!view || !customEvent.detail) return;
+      const { pos } = customEvent.detail;
+      const targetPos = Math.min(pos, view.state.doc.length);
+
+      view.dispatch({
+        selection: { anchor: targetPos, head: targetPos },
+        scrollIntoView: true,
+      });
+      view.focus();
+    };
+
+    window.addEventListener('as:scroll-to-line', handleScrollToHeading);
+    return () => window.removeEventListener('as:scroll-to-line', handleScrollToHeading);
+  }, []);
+
   interface BreadcrumbItem {
     id: string;
     title: string;

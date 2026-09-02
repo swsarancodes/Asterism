@@ -183,6 +183,13 @@
   transform: rotate(45deg);
 }
 
+.as-task-checked-text {
+  text-decoration: line-through;
+  opacity: 0.55;
+  transition: opacity var(--as-transition-fast), text-decoration var(--as-transition-fast);
+}
+
+
 /* Concealed Syntax Tokens */
 .as-syntax-hidden {
   display: inline-block;

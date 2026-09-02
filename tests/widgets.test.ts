@@ -15,6 +15,7 @@ import {
   setBulletList,
   setNumberedList,
   setHeadingLevel,
+  toggleTaskCompletion,
   markdownFormattingKeymap,
 } from '../src/editor/commands/formatting';
 import { findLinkUrlAt, imagePasteDropExtension } from '../src/editor/setup';
@@ -373,6 +374,35 @@ describe('Task List & Empty Line List Formatting', () => {
     view.dispatch({ selection: { anchor: 6, head: 6 } });
     backspaceCmd?.run(view);
     expect(view.state.doc.toString()).toBe('');
+  });
+
+  test('toggleTaskCompletion toggles checked state and upgrades bullet items', () => {
+    // 1. Toggle unchecked to checked
+    const state1 = EditorState.create({ doc: '- [ ] Read documentation' });
+    const view1 = new EditorView({ state: state1 });
+    view1.dispatch({ selection: { anchor: 10, head: 10 } });
+    const toggled1 = toggleTaskCompletion(view1);
+    expect(toggled1).toBe(true);
+    expect(view1.state.doc.toString()).toBe('- [x] Read documentation');
+
+    // 2. Toggle checked back to unchecked
+    const toggled2 = toggleTaskCompletion(view1);
+    expect(toggled2).toBe(true);
+    expect(view1.state.doc.toString()).toBe('- [ ] Read documentation');
+
+    // 3. Upgrades bullet list item to task item
+    const state3 = EditorState.create({ doc: '- Plain bullet note' });
+    const view3 = new EditorView({ state: state3 });
+    view3.dispatch({ selection: { anchor: 5, head: 5 } });
+    const toggled3 = toggleTaskCompletion(view3);
+    expect(toggled3).toBe(true);
+    expect(view3.state.doc.toString()).toBe('- [ ] Plain bullet note');
+
+    // 4. Mod-Enter keybinding triggers toggle
+    const modEnter = markdownFormattingKeymap.find((k) => k.key === 'Mod-Enter');
+    expect(modEnter).toBeDefined();
+    modEnter?.run(view3);
+    expect(view3.state.doc.toString()).toBe('- [x] Plain bullet note');
   });
 });
 

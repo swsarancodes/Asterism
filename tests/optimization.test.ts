@@ -4,6 +4,7 @@ import { parseMarkdownTable, serializeMarkdownTable } from '../src/editor/widget
 import { findInlineSpans } from '../src/editor/decorations/delimiter-guard';
 import { formatDisplayName } from '../src/core/document/file-meta';
 import { syncDocumentHeading, extractDocumentHeading } from '../src/core/document/document';
+import { extractDocumentHeadings } from '../src/app/components/DocumentOutline';
 
 describe('Fast Word Count & Reading Time', () => {
   test('Empty and whitespace-only strings return 0 words', () => {
@@ -286,6 +287,76 @@ describe('Hierarchical Folders and Subpages (Notion-Style)', () => {
     expect(useWorkspaceStore.getState().collapsedIds.includes(docsFolder.id)).toBe(true);
     store.toggleCollapse(docsFolder.id);
     expect(useWorkspaceStore.getState().collapsedIds.includes(docsFolder.id)).toBe(false);
+  });
+});
+
+describe('Document Outline & Headings Parser', () => {
+  test('extractDocumentHeadings extracts all heading levels with correct line numbers', () => {
+    const markdown = `# Architecture Overview
+Some intro text
+
+## Component Design
+Paragraph here
+
+### Data Layer
+- Point 1
+- Point 2
+
+#### Subsystem Alpha
+Details
+
+# Deployment`;
+
+    const headings = extractDocumentHeadings(markdown);
+    expect(headings.length).toBe(5);
+
+    expect(headings[0].text).toBe('Architecture Overview');
+    expect(headings[0].level).toBe(1);
+    expect(headings[0].line).toBe(1);
+
+    expect(headings[1].text).toBe('Component Design');
+    expect(headings[1].level).toBe(2);
+    expect(headings[1].line).toBe(4);
+
+    expect(headings[2].text).toBe('Data Layer');
+    expect(headings[2].level).toBe(3);
+    expect(headings[2].line).toBe(7);
+
+    expect(headings[3].text).toBe('Subsystem Alpha');
+    expect(headings[3].level).toBe(4);
+    expect(headings[3].line).toBe(11);
+
+    expect(headings[4].text).toBe('Deployment');
+    expect(headings[4].level).toBe(1);
+    expect(headings[4].line).toBe(14);
+  });
+
+  test('extractDocumentHeadings skips comments and code blocks', () => {
+    const markdown = `# Real Heading 1
+
+\`\`\`typescript
+# Not a heading
+const x = '# Also not a heading';
+\`\`\`
+
+## Real Heading 2`;
+
+    const headings = extractDocumentHeadings(markdown);
+    expect(headings.length).toBe(2);
+    expect(headings[0].text).toBe('Real Heading 1');
+    expect(headings[1].text).toBe('Real Heading 2');
+  });
+
+  test('extractDocumentHeadings cleans inline formatting like bold, italic, and code', () => {
+    const markdown = `# **Bold** and *Italic* and \`Code\` Heading`;
+    const headings = extractDocumentHeadings(markdown);
+    expect(headings.length).toBe(1);
+    expect(headings[0].text).toBe('Bold and Italic and Code Heading');
+  });
+
+  test('extractDocumentHeadings returns empty array for empty document', () => {
+    expect(extractDocumentHeadings('')).toEqual([]);
+    expect(extractDocumentHeadings('Just plain paragraphs\nNo headings at all')).toEqual([]);
   });
 });
 

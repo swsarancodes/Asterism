@@ -2,7 +2,7 @@ import React from 'react';
 import { useWorkspaceStore } from '../stores/workspace';
 import { useSettingsStore } from '../stores/settings';
 import { ViewMode } from '../../editor/modes/view-mode';
-import { FileText, Plus, X, Eye, Code, Columns, PanelLeft } from 'lucide-react';
+import { FileText, Plus, X, Eye, Code, Columns, PanelLeft, ListTree } from 'lucide-react';
 import { formatDisplayName } from '../../core/document/file-meta';
 
 export const TabBar: React.FC = () => {
@@ -17,10 +17,24 @@ export const TabBar: React.FC = () => {
   const setMode = useSettingsStore((s) => s.setMode);
   const sidebarOpen = useSettingsStore((s) => s.sidebarOpen);
   const toggleSidebar = useSettingsStore((s) => s.toggleSidebar);
+  const outlineOpen = useSettingsStore((s) => s.outlineOpen);
+  const toggleOutline = useSettingsStore((s) => s.toggleOutline);
 
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [editingName, setEditingName] = React.useState('');
   const inputRef = React.useRef<HTMLInputElement>(null);
+
+  // Global shortcut for Document Outline (⌘⇧O)
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'O' || e.key === 'o')) {
+        e.preventDefault();
+        toggleOutline();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [toggleOutline]);
 
   React.useEffect(() => {
     if (editingId && inputRef.current) {
@@ -216,53 +230,92 @@ export const TabBar: React.FC = () => {
         </button>
       </div>
 
-      {/* Right side: Mode Switcher */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          backgroundColor: 'var(--as-bg-subtle)',
-          borderRadius: 'var(--as-radius-sm)',
-          padding: '2px',
-          gap: '2px',
-        }}
-      >
-        {(
-          [
-            { id: 'hybrid', label: 'Hybrid', icon: Eye, shortcut: '⌘1' },
-            { id: 'source', label: 'Source', icon: Code, shortcut: '⌘2' },
-            { id: 'split', label: 'Split', icon: Columns, shortcut: '⌘3' },
-          ] as Array<{ id: ViewMode; label: string; icon: any; shortcut: string }>
-        ).map((item) => {
-          const isSelected = mode === item.id;
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setMode(item.id)}
-              title={`${item.label} Mode (${item.shortcut})`}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '4px 8px',
-                border: 'none',
-                borderRadius: '4px',
-                fontSize: '12px',
-                fontWeight: isSelected ? 600 : 400,
-                color: isSelected ? 'var(--as-text)' : 'var(--as-text-muted)',
-                backgroundColor: isSelected ? 'var(--as-bg-surface)' : 'transparent',
-                boxShadow: isSelected ? 'var(--as-shadow-sm)' : 'none',
-                cursor: 'pointer',
-                transition: 'all var(--as-transition-fast)',
-              }}
-            >
-              <Icon size={13} />
-              <span>{item.label}</span>
-            </button>
-          );
-        })}
+      {/* Right side: Mode Switcher & Outline */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            backgroundColor: 'var(--as-bg-subtle)',
+            borderRadius: 'var(--as-radius-sm)',
+            padding: '2px',
+            gap: '2px',
+          }}
+        >
+          {(
+            [
+              { id: 'hybrid', label: 'Hybrid', icon: Eye, shortcut: '⌘1' },
+              { id: 'source', label: 'Source', icon: Code, shortcut: '⌘2' },
+              { id: 'split', label: 'Split', icon: Columns, shortcut: '⌘3' },
+            ] as Array<{ id: ViewMode; label: string; icon: any; shortcut: string }>
+          ).map((item) => {
+            const isSelected = mode === item.id;
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setMode(item.id)}
+                title={`${item.label} Mode (${item.shortcut})`}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '4px 8px',
+                  border: 'none',
+                  borderRadius: '4px',
+                  fontSize: '12px',
+                  fontWeight: isSelected ? 600 : 400,
+                  color: isSelected ? 'var(--as-text)' : 'var(--as-text-muted)',
+                  backgroundColor: isSelected ? 'var(--as-bg-surface)' : 'transparent',
+                  boxShadow: isSelected ? 'var(--as-shadow-sm)' : 'none',
+                  cursor: 'pointer',
+                  transition: 'all var(--as-transition-fast)',
+                }}
+              >
+                <Icon size={13} />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Outline Button */}
+        <button
+          type="button"
+          onClick={toggleOutline}
+          title="Document Outline (⌘⇧O)"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+            padding: '5px 8px',
+            border: 'none',
+            borderRadius: 'var(--as-radius-sm)',
+            fontSize: '12px',
+            fontWeight: outlineOpen ? 600 : 400,
+            color: outlineOpen ? 'var(--as-accent)' : 'var(--as-text-muted)',
+            backgroundColor: outlineOpen ? 'var(--as-bg-surface)' : 'transparent',
+            boxShadow: outlineOpen ? 'var(--as-shadow-sm)' : 'none',
+            cursor: 'pointer',
+            transition: 'all var(--as-transition-fast)',
+          }}
+          onMouseEnter={(e) => {
+            if (!outlineOpen) {
+              e.currentTarget.style.backgroundColor = 'var(--as-bg-subtle)';
+              e.currentTarget.style.color = 'var(--as-text)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!outlineOpen) {
+              e.currentTarget.style.backgroundColor = 'transparent';
+              e.currentTarget.style.color = 'var(--as-text-muted)';
+            }
+          }}
+        >
+          <ListTree size={14} />
+          <span>Outline</span>
+        </button>
       </div>
     </div>
   );

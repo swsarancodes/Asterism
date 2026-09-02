@@ -3,6 +3,7 @@ import { useSettingsStore } from './app/stores/settings';
 import { Sidebar } from './app/components/Sidebar';
 import { TabBar } from './app/components/TabBar';
 import { EditorPane } from './app/components/EditorPane';
+import { DocumentOutline } from './app/components/DocumentOutline';
 import { StatusBar } from './app/components/StatusBar';
 import { CommandPalette } from './app/components/CommandPalette';
 import './editor/theme/base.css';
@@ -44,7 +45,7 @@ export const App: React.FC = () => {
         {/* Tab & Mode Bar */}
         <TabBar />
 
-        {/* Editor Area */}
+        {/* Editor & Outline Area */}
         <div style={{ flex: 1, position: 'relative', overflow: 'hidden', display: 'flex' }}>
           {mode === 'split' ? (
             <>
@@ -56,8 +57,13 @@ export const App: React.FC = () => {
               </div>
             </>
           ) : (
-            <EditorPane />
+            <div style={{ flex: 1, height: '100%', overflow: 'hidden' }}>
+              <EditorPane />
+            </div>
           )}
+
+          {/* Document Outline Drawer */}
+          <DocumentOutline />
         </div>
 
         {/* Status Bar */}
