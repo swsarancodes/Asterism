@@ -280,7 +280,7 @@ export function createEditorExtensions(options: EditorSetupOptions = {}): Extens
 
   return [
     codeFolding(),
-    foldGutter(),
+    ...(mode === 'source' ? [foldGutter()] : []),
     history(),
     drawSelection(),
     dropCursor(),

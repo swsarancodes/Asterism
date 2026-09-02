@@ -214,10 +214,24 @@
   text-decoration: underline;
 }
 
-/* Fold Gutter & Placeholder */
+/* Gutters & Fold Gutter */
+.cm-gutters {
+  background-color: transparent !important;
+  border: none !important;
+  border-right: none !important;
+}
+
+.cm-gutter {
+  background-color: transparent !important;
+  border: none !important;
+  border-right: none !important;
+}
+
 .cm-foldGutter {
   width: 14px;
   opacity: 0.4;
+  border: none !important;
+  border-right: none !important;
   transition: opacity var(--as-transition-fast);
 }
 
