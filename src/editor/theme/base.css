@@ -917,6 +917,92 @@
   font-size: 10px;
 }
 
+/* ==========================================================================
+   Responsive UI & Layout Styles
+   ========================================================================== */
+
+/* Hide scrollbars for clean overflow */
+.as-tab-scroll-container::-webkit-scrollbar {
+  display: none;
+}
+.as-tab-scroll-container {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Mobile & Overlay Drawers */
+.as-sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+  z-index: 90;
+  animation: fadeIn 0.15s ease;
+}
+
+.as-outline-backdrop {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(1px);
+  z-index: 35;
+  animation: fadeIn 0.15s ease;
+}
+
+/* Breakpoint: <= 960px (Laptops / Half-Screen Windows) */
+@media (max-width: 960px) {
+  .as-tabbar-btn-label {
+    display: none !important;
+  }
+  .as-tabbar-action-btn {
+    padding: 5px 7px !important;
+  }
+}
+
+/* Breakpoint: <= 768px (Tablets / Narrow Windows) */
+@media (max-width: 768px) {
+  .as-view-mode-label {
+    display: none !important;
+  }
+  .as-view-mode-btn {
+    padding: 4px 6px !important;
+  }
+  .cm-content {
+    padding: 0 16px 140px 16px !important;
+  }
+  .cm-scroller {
+    padding: 16px 0 !important;
+  }
+  .as-table-split {
+    grid-template-columns: 1fr !important;
+  }
+  .as-table-editor-wrapper {
+    border-right: none !important;
+    border-bottom: 1px solid var(--as-border);
+  }
+  .as-diagram-split {
+    grid-template-columns: 1fr !important;
+  }
+  .as-diagram-editor-wrapper {
+    border-right: none !important;
+    border-bottom: 1px solid var(--as-border);
+  }
+}
+
+/* Breakpoint: <= 640px (Mobile / Compact Windows) */
+@media (max-width: 640px) {
+  .as-status-extra {
+    display: none !important;
+  }
+  .cm-content {
+    padding: 0 12px 100px 12px !important;
+  }
+  .as-tab-item {
+    max-width: 130px !important;
+    padding: 4px 8px !important;
+  }
+}
+
 /* Print & PDF Export Styling */
 @media print {
   body, html {

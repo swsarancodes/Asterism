@@ -41,6 +41,18 @@ export const Sidebar: React.FC = () => {
   const sidebarOpen = useSettingsStore((s) => s.sidebarOpen);
   const toggleSidebar = useSettingsStore((s) => s.toggleSidebar);
 
+  const [isCompact, setIsCompact] = useState(
+    typeof window !== 'undefined' ? window.innerWidth < 768 : false
+  );
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsCompact(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const [query, setQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
 
@@ -459,7 +471,10 @@ serialization step. Saving is \`doc.toString()\` plus line-ending restoration.
                   setDraggedItemId(null);
                   setDropTargetId(null);
                 }}
-                onClick={() => setActiveDoc(doc.id)}
+                onClick={() => {
+                  setActiveDoc(doc.id);
+                  if (isCompact) toggleSidebar();
+                }}
                 onDoubleClick={(e) => handleStartRename(doc.id, doc.meta.fileName, 'doc', e)}
                 style={{
                   display: 'flex',
@@ -657,32 +672,49 @@ serialization step. Saving is \`doc.toString()\` plus line-ending restoration.
   };
 
   return (
-    <aside
-      aria-label="File Navigation"
-      style={{
-        width: sidebarOpen ? '260px' : '0px',
-        minWidth: sidebarOpen ? '260px' : '0px',
-        height: '100%',
-        backgroundColor: 'var(--as-bg-surface)',
-        borderRight: sidebarOpen ? '1px solid var(--as-border)' : 'none',
-        display: 'flex',
-        flexDirection: 'column',
-        transition: 'all var(--as-transition-normal)',
-        overflow: 'hidden',
-        zIndex: 20,
-        flexShrink: 0,
-      }}
-    >
-      <div
+    <>
+      {/* Mobile/Compact Backdrop */}
+      {sidebarOpen && isCompact && (
+        <div
+          className="as-sidebar-backdrop"
+          onClick={toggleSidebar}
+          aria-hidden="true"
+        />
+      )}
+      <aside
+        aria-label="File Navigation"
+        className="as-sidebar"
         style={{
-          width: '260px',
+          width: sidebarOpen ? (isCompact ? '280px' : '260px') : '0px',
+          minWidth: sidebarOpen ? (isCompact ? '280px' : '260px') : '0px',
+          maxWidth: isCompact ? '85vw' : '260px',
           height: '100%',
+          backgroundColor: 'var(--as-bg-surface)',
+          borderRight: sidebarOpen ? '1px solid var(--as-border)' : 'none',
           display: 'flex',
           flexDirection: 'column',
-          opacity: sidebarOpen ? 1 : 0,
-          transition: 'opacity var(--as-transition-fast)',
+          transition: 'all var(--as-transition-normal)',
+          overflow: 'hidden',
+          zIndex: isCompact ? 100 : 20,
+          position: isCompact ? 'fixed' : 'relative',
+          left: 0,
+          top: 0,
+          bottom: 0,
+          boxShadow: isCompact && sidebarOpen ? 'var(--as-shadow-lg, 0 10px 30px rgba(0,0,0,0.25))' : 'none',
+          flexShrink: 0,
         }}
       >
+        <div
+          style={{
+            width: isCompact ? '280px' : '260px',
+            maxWidth: isCompact ? '85vw' : '260px',
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            opacity: sidebarOpen ? 1 : 0,
+            transition: 'opacity var(--as-transition-fast)',
+          }}
+        >
         {/* Header Branding */}
         <div
           style={{
@@ -999,7 +1031,10 @@ serialization step. Saving is \`doc.toString()\` plus line-ending restoration.
                 return (
                   <div
                     key={`search-doc-${doc.id}`}
-                    onClick={() => setActiveDoc(doc.id)}
+                    onClick={() => {
+                      setActiveDoc(doc.id);
+                      if (isCompact) toggleSidebar();
+                    }}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -1144,5 +1179,6 @@ serialization step. Saving is \`doc.toString()\` plus line-ending restoration.
       {/* Trash Recovery Modal */}
       <TrashModal isOpen={trashOpen} onClose={() => setTrashOpen(false)} />
     </aside>
+    </>
   );
 };

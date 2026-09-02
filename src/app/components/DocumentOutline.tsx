@@ -80,6 +80,16 @@ export const DocumentOutline: React.FC = () => {
 
   const [activeHeadingId, setActiveHeadingId] = React.useState<string | null>(null);
 
+  const [isCompact, setIsCompact] = React.useState(
+    typeof window !== 'undefined' ? window.innerWidth < 960 : false
+  );
+
+  React.useEffect(() => {
+    const handleResize = () => setIsCompact(window.innerWidth < 960);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // Scroll spy & cursor tracking observer
   React.useEffect(() => {
     const scroller = typeof document !== 'undefined' ? document.querySelector('.cm-scroller') : null;
@@ -119,24 +129,43 @@ export const DocumentOutline: React.FC = () => {
         detail: { line: heading.line, pos: heading.pos },
       })
     );
+    if (isCompact) {
+      toggleOutline();
+    }
   };
 
   return (
-    <aside
-      aria-label="Document Outline"
-      style={{
-        width: '260px',
-        height: '100%',
-        backgroundColor: 'var(--as-bg-surface)',
-        borderLeft: '1px solid var(--as-border)',
-        display: 'flex',
-        flexDirection: 'column',
-        flexShrink: 0,
-        userSelect: 'none',
-        zIndex: 10,
-        animation: 'fadeIn 0.15s ease',
-      }}
-    >
+    <>
+      {/* Backdrop for compact viewports */}
+      {isCompact && (
+        <div
+          className="as-outline-backdrop"
+          onClick={toggleOutline}
+          aria-hidden="true"
+        />
+      )}
+      <aside
+        aria-label="Document Outline"
+        className="as-outline-drawer"
+        style={{
+          width: isCompact ? '280px' : '260px',
+          maxWidth: '85vw',
+          height: '100%',
+          backgroundColor: 'var(--as-bg-surface)',
+          borderLeft: '1px solid var(--as-border)',
+          display: 'flex',
+          flexDirection: 'column',
+          flexShrink: 0,
+          userSelect: 'none',
+          zIndex: isCompact ? 40 : 10,
+          position: isCompact ? 'absolute' : 'relative',
+          right: 0,
+          top: 0,
+          bottom: 0,
+          boxShadow: isCompact ? 'var(--as-shadow-lg, 0 8px 30px rgba(0,0,0,0.2))' : 'none',
+          animation: 'fadeIn 0.15s ease',
+        }}
+      >
       {/* Header */}
       <div
         style={{
@@ -309,5 +338,6 @@ export const DocumentOutline: React.FC = () => {
         </div>
       </div>
     </aside>
+    </>
   );
 };

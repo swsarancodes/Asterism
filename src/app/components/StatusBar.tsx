@@ -38,23 +38,32 @@ export const StatusBar: React.FC = () => {
       }}
     >
       {/* Left side: word statistics */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          minWidth: 0,
+          overflow: 'hidden',
+          whiteSpace: 'nowrap',
+        }}
+      >
         <span>
           {wordCount} {wordCount === 1 ? 'word' : 'words'}
         </span>
-        <span>•</span>
-        <span>{charCount} chars</span>
-        <span>•</span>
-        <span>{readingTime} min read</span>
+        <span className="as-status-extra">•</span>
+        <span className="as-status-extra">{charCount} chars</span>
+        <span className="as-status-extra">•</span>
+        <span className="as-status-extra">{readingTime} min read</span>
       </div>
 
       {/* Right side: cursor coordinates, encoding, theme */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
         <span>
           Ln {line}, Col {col}
         </span>
-        <span>•</span>
-        <span>
+        <span className="as-status-extra">•</span>
+        <span className="as-status-extra">
           {lineEnding === 'crlf' ? 'CRLF' : 'LF'} • UTF-8
         </span>
 

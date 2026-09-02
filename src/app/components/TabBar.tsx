@@ -87,6 +87,7 @@ export const TabBar: React.FC = () => {
 
   return (
     <div
+      className="as-tabbar"
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -94,33 +95,202 @@ export const TabBar: React.FC = () => {
         height: '42px',
         borderBottom: '1px solid var(--as-border)',
         backgroundColor: 'var(--as-bg-surface)',
-        padding: '0 10px',
+        padding: '0 8px',
         userSelect: 'none',
         flexShrink: 0,
+        overflow: 'hidden',
       }}
     >
-      {/* Left side: Expand sidebar button (when collapsed) + Tabs */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', overflowX: 'auto' }}>
-        {/* Top-Left Expand Sidebar Button when collapsed */}
-        {!sidebarOpen && (
+      {/* Left side: Sidebar toggle button + Scrollable Tabs */}
+      <div
+        className="as-tabbar-left"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '4px',
+          flex: 1,
+          minWidth: 0,
+          overflow: 'hidden',
+          marginRight: '6px',
+        }}
+      >
+        {/* Sidebar Toggle Button */}
+        <button
+          type="button"
+          aria-label={sidebarOpen ? 'Collapse sidebar (⌘\\)' : 'Expand sidebar (⌘\\)'}
+          title={sidebarOpen ? 'Collapse sidebar (⌘\\)' : 'Expand sidebar (⌘\\)'}
+          onClick={toggleSidebar}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '28px',
+            height: '28px',
+            borderRadius: 'var(--as-radius-sm)',
+            border: 'none',
+            backgroundColor: !sidebarOpen ? 'var(--as-bg-subtle)' : 'transparent',
+            color: !sidebarOpen ? 'var(--as-accent)' : 'var(--as-text-muted)',
+            cursor: 'pointer',
+            flexShrink: 0,
+            marginRight: '4px',
+            transition: 'all var(--as-transition-fast)',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = 'var(--as-bg-hover)';
+            e.currentTarget.style.color = 'var(--as-text)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = !sidebarOpen ? 'var(--as-bg-subtle)' : 'transparent';
+            e.currentTarget.style.color = !sidebarOpen ? 'var(--as-accent)' : 'var(--as-text-muted)';
+          }}
+        >
+          <PanelLeft size={16} />
+        </button>
+
+        {/* Scrollable Tabs */}
+        <div
+          className="as-tab-scroll-container"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            overflowX: 'auto',
+            overflowY: 'hidden',
+            flex: 1,
+            minWidth: 0,
+          }}
+        >
+          {documents
+            .filter((doc) => !doc.deletedAt)
+            .map((doc) => {
+              const isActive = doc.id === activeId;
+              const isEditing = doc.id === editingId;
+
+              return (
+                <div
+                  key={doc.id}
+                  onClick={() => setActiveDoc(doc.id)}
+                  onDoubleClick={(e) => handleStartRename(doc.id, doc.meta.fileName, e)}
+                  className="as-tab-item"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '5px 10px',
+                    borderRadius: 'var(--as-radius-sm)',
+                    fontSize: '13px',
+                    fontWeight: isActive ? 600 : 400,
+                    color: isActive ? 'var(--as-text)' : 'var(--as-text-muted)',
+                    backgroundColor: isActive ? 'var(--as-bg-subtle)' : 'transparent',
+                    cursor: 'pointer',
+                    transition: 'all var(--as-transition-fast)',
+                    flexShrink: 0,
+                    whiteSpace: 'nowrap',
+                    maxWidth: '180px',
+                    minWidth: '50px',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isActive) e.currentTarget.style.backgroundColor = 'var(--as-bg-hover)';
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
+                  }}
+                >
+                  <FileText size={14} style={{ opacity: isActive ? 1 : 0.7, flexShrink: 0 }} />
+
+                  {isEditing ? (
+                    <input
+                      ref={inputRef}
+                      autoFocus
+                      type="text"
+                      value={editingName}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => setEditingName(e.target.value)}
+                      onBlur={() => handleFinishRename(doc.id)}
+                      onKeyDown={(e) => {
+                        e.stopPropagation();
+                        if (e.key === 'Enter') {
+                          handleFinishRename(doc.id);
+                        } else if (e.key === 'Escape') {
+                          setEditingId(null);
+                        }
+                      }}
+                      style={{
+                        fontSize: '13px',
+                        fontWeight: isActive ? 600 : 400,
+                        fontFamily: 'inherit',
+                        color: 'var(--as-text)',
+                        backgroundColor: 'transparent',
+                        border: 'none',
+                        borderBottom: '1.5px solid var(--as-accent)',
+                        borderRadius: '0',
+                        outline: 'none',
+                        padding: '0 1px',
+                        margin: 0,
+                        width: `${Math.max(40, (editingName.length + 1) * 7.5)}px`,
+                        minWidth: '40px',
+                      }}
+                    />
+                  ) : (
+                    <span
+                      title={`${doc.meta.fileName} (Double-click to rename)`}
+                      style={{
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        flex: 1,
+                        minWidth: 0,
+                      }}
+                    >
+                      {formatDisplayName(doc.meta.fileName)}
+                    </span>
+                  )}
+
+                  {documents.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        closeDoc(doc.id);
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        padding: 0,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'inherit',
+                        opacity: 0.6,
+                        flexShrink: 0,
+                        width: '14px',
+                        height: '14px',
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
+                      onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.6')}
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+
           <button
             type="button"
-            aria-label="Expand sidebar (⌘\)"
-            title="Expand sidebar (⌘\)"
-            onClick={toggleSidebar}
+            onClick={() => createEmpty()}
+            title="New Document (⌘N)"
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '28px',
-              height: '28px',
-              borderRadius: 'var(--as-radius-sm)',
+              background: 'none',
               border: 'none',
-              backgroundColor: 'transparent',
               color: 'var(--as-text-muted)',
               cursor: 'pointer',
-              marginRight: '6px',
-              transition: 'all var(--as-transition-fast)',
+              padding: '4px',
+              borderRadius: '4px',
+              display: 'flex',
+              alignItems: 'center',
+              flexShrink: 0,
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.backgroundColor = 'var(--as-bg-hover)';
@@ -131,138 +301,21 @@ export const TabBar: React.FC = () => {
               e.currentTarget.style.color = 'var(--as-text-muted)';
             }}
           >
-            <PanelLeft size={16} />
+            <Plus size={16} />
           </button>
-        )}
-
-        {documents
-          .filter((doc) => !doc.deletedAt)
-          .map((doc) => {
-            const isActive = doc.id === activeId;
-            const isEditing = doc.id === editingId;
-
-          return (
-            <div
-              key={doc.id}
-              onClick={() => setActiveDoc(doc.id)}
-              onDoubleClick={(e) => handleStartRename(doc.id, doc.meta.fileName, e)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '5px 12px',
-                borderRadius: 'var(--as-radius-sm)',
-                fontSize: '13px',
-                fontWeight: isActive ? 600 : 400,
-                color: isActive ? 'var(--as-text)' : 'var(--as-text-muted)',
-                backgroundColor: isActive ? 'var(--as-bg-subtle)' : 'transparent',
-                cursor: 'pointer',
-                transition: 'all var(--as-transition-fast)',
-              }}
-              onMouseEnter={(e) => {
-                if (!isActive) e.currentTarget.style.backgroundColor = 'var(--as-bg-hover)';
-              }}
-              onMouseLeave={(e) => {
-                if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
-              }}
-            >
-              <FileText size={14} style={{ opacity: isActive ? 1 : 0.7 }} />
-
-              {isEditing ? (
-                <input
-                  ref={inputRef}
-                  autoFocus
-                  type="text"
-                  value={editingName}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) => setEditingName(e.target.value)}
-                  onBlur={() => handleFinishRename(doc.id)}
-                  onKeyDown={(e) => {
-                    e.stopPropagation();
-                    if (e.key === 'Enter') {
-                      handleFinishRename(doc.id);
-                    } else if (e.key === 'Escape') {
-                      setEditingId(null);
-                    }
-                  }}
-                  style={{
-                    fontSize: '13px',
-                    fontWeight: isActive ? 600 : 400,
-                    fontFamily: 'inherit',
-                    color: 'var(--as-text)',
-                    backgroundColor: 'transparent',
-                    border: 'none',
-                    borderBottom: '1.5px solid var(--as-accent)',
-                    borderRadius: '0',
-                    outline: 'none',
-                    padding: '0 1px',
-                    margin: 0,
-                    width: `${Math.max(40, (editingName.length + 1) * 7.5)}px`,
-                    minWidth: '40px',
-                  }}
-                />
-              ) : (
-                <span title={`${doc.meta.fileName} (Double-click to rename)`}>
-                  {formatDisplayName(doc.meta.fileName)}
-                </span>
-              )}
-
-              {documents.length > 1 && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    closeDoc(doc.id);
-                  }}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    padding: 0,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    color: 'inherit',
-                    opacity: 0.6,
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
-                  onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.6')}
-                >
-                  <X size={12} />
-                </button>
-              )}
-            </div>
-          );
-        })}
-
-        <button
-          type="button"
-          onClick={() => createEmpty()}
-          title="New Document (⌘N)"
-          style={{
-            background: 'none',
-            border: 'none',
-            color: 'var(--as-text-muted)',
-            cursor: 'pointer',
-            padding: '4px',
-            borderRadius: '4px',
-            display: 'flex',
-            alignItems: 'center',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = 'var(--as-bg-hover)';
-            e.currentTarget.style.color = 'var(--as-text)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'transparent';
-            e.currentTarget.style.color = 'var(--as-text-muted)';
-          }}
-        >
-          <Plus size={16} />
-        </button>
+        </div>
       </div>
 
-      {/* Right side: Mode Switcher & Outline */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+      {/* Right side: Mode Switcher & Actions */}
+      <div
+        className="as-tabbar-right"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '5px',
+          flexShrink: 0,
+        }}
+      >
         <div
           style={{
             display: 'flex',
@@ -271,6 +324,7 @@ export const TabBar: React.FC = () => {
             borderRadius: 'var(--as-radius-sm)',
             padding: '2px',
             gap: '2px',
+            flexShrink: 0,
           }}
         >
           {(
@@ -286,6 +340,7 @@ export const TabBar: React.FC = () => {
               <button
                 key={item.id}
                 type="button"
+                className="as-view-mode-btn"
                 onClick={() => setMode(item.id)}
                 title={`${item.label} Mode (${item.shortcut})`}
                 style={{
@@ -302,10 +357,11 @@ export const TabBar: React.FC = () => {
                   boxShadow: isSelected ? 'var(--as-shadow-sm)' : 'none',
                   cursor: 'pointer',
                   transition: 'all var(--as-transition-fast)',
+                  flexShrink: 0,
                 }}
               >
-                <Icon size={13} />
-                <span>{item.label}</span>
+                <Icon size={13} style={{ flexShrink: 0 }} />
+                <span className="as-view-mode-label">{item.label}</span>
               </button>
             );
           })}
@@ -314,6 +370,7 @@ export const TabBar: React.FC = () => {
         {/* Outline Button */}
         <button
           type="button"
+          className="as-tabbar-action-btn"
           onClick={toggleOutline}
           title="Document Outline (⌘⇧O)"
           style={{
@@ -330,6 +387,7 @@ export const TabBar: React.FC = () => {
             boxShadow: outlineOpen ? 'var(--as-shadow-sm)' : 'none',
             cursor: 'pointer',
             transition: 'all var(--as-transition-fast)',
+            flexShrink: 0,
           }}
           onMouseEnter={(e) => {
             if (!outlineOpen) {
@@ -344,13 +402,14 @@ export const TabBar: React.FC = () => {
             }
           }}
         >
-          <ListTree size={14} />
-          <span>Outline</span>
+          <ListTree size={14} style={{ flexShrink: 0 }} />
+          <span className="as-tabbar-btn-label">Outline</span>
         </button>
 
         {/* Full-Text Search Button */}
         <button
           type="button"
+          className="as-tabbar-action-btn"
           onClick={toggleSearchModal}
           title="Full-Text Search (⌘⇧F)"
           style={{
@@ -366,6 +425,7 @@ export const TabBar: React.FC = () => {
             backgroundColor: 'transparent',
             cursor: 'pointer',
             transition: 'all var(--as-transition-fast)',
+            flexShrink: 0,
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.backgroundColor = 'var(--as-bg-subtle)';
@@ -376,14 +436,15 @@ export const TabBar: React.FC = () => {
             e.currentTarget.style.color = 'var(--as-text-muted)';
           }}
         >
-          <Search size={14} />
-          <span>Search</span>
+          <Search size={14} style={{ flexShrink: 0 }} />
+          <span className="as-tabbar-btn-label">Search</span>
         </button>
 
         {/* Export Dropdown */}
-        <div ref={exportRef} style={{ position: 'relative' }}>
+        <div ref={exportRef} style={{ position: 'relative', flexShrink: 0 }}>
           <button
             type="button"
+            className="as-tabbar-action-btn"
             onClick={() => setExportMenuOpen(!exportMenuOpen)}
             title="Export Document (⌘P for PDF)"
             style={{
@@ -399,6 +460,7 @@ export const TabBar: React.FC = () => {
               backgroundColor: exportMenuOpen ? 'var(--as-bg-subtle)' : 'transparent',
               cursor: 'pointer',
               transition: 'all var(--as-transition-fast)',
+              flexShrink: 0,
             }}
             onMouseEnter={(e) => {
               if (!exportMenuOpen) {
@@ -413,9 +475,9 @@ export const TabBar: React.FC = () => {
               }
             }}
           >
-            <Download size={14} />
-            <span>Export</span>
-            <ChevronDown size={11} style={{ opacity: 0.7 }} />
+            <Download size={14} style={{ flexShrink: 0 }} />
+            <span className="as-tabbar-btn-label">Export</span>
+            <ChevronDown size={11} style={{ opacity: 0.7, flexShrink: 0 }} />
           </button>
 
           {exportMenuOpen && (

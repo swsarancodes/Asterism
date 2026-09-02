@@ -351,15 +351,23 @@ export const SlashCommandMenu: React.FC<SlashMenuProps> = ({
 
   if (!isOpen || !position || !view || !slashRange) return null;
 
+  const menuLeft = typeof window !== 'undefined'
+    ? Math.max(10, Math.min(position.left, window.innerWidth - 305))
+    : position.left;
+  const menuTop = typeof window !== 'undefined'
+    ? Math.max(10, Math.min(position.top + 24, window.innerHeight - 350))
+    : position.top + 24;
+
   return (
     <div
       ref={listRef}
       style={{
         position: 'fixed',
-        top: `${position.top + 24}px`,
-        left: `${Math.min(position.left, window.innerWidth - 320)}px`,
+        top: `${menuTop}px`,
+        left: `${menuLeft}px`,
         zIndex: 9500,
         width: '290px',
+        maxWidth: 'calc(100vw - 20px)',
         maxHeight: '340px',
         backgroundColor: 'var(--as-bg-surface)',
         border: '1px solid var(--as-border)',

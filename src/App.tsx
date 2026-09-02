@@ -13,6 +13,16 @@ export const App: React.FC = () => {
   const theme = useSettingsStore((s) => s.theme);
   const mode = useSettingsStore((s) => s.mode);
 
+  const [isMobile, setIsMobile] = React.useState(
+    typeof window !== 'undefined' ? window.innerWidth < 768 : false
+  );
+
+  React.useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // Sync theme to root attribute
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -37,6 +47,7 @@ export const App: React.FC = () => {
       <div
         style={{
           flex: 1,
+          minWidth: 0,
           display: 'flex',
           flexDirection: 'column',
           height: '100%',
@@ -47,18 +58,37 @@ export const App: React.FC = () => {
         <TabBar />
 
         {/* Editor & Outline Area */}
-        <div style={{ flex: 1, position: 'relative', overflow: 'hidden', display: 'flex' }}>
+        <div style={{ flex: 1, minWidth: 0, position: 'relative', overflow: 'hidden', display: 'flex' }}>
           {mode === 'split' ? (
-            <>
-              <div style={{ flex: 1, height: '100%', borderRight: '1px solid var(--as-border)' }}>
+            <div
+              style={{
+                flex: 1,
+                minWidth: 0,
+                display: 'flex',
+                flexDirection: isMobile ? 'column' : 'row',
+                height: '100%',
+                width: '100%',
+                overflow: 'hidden',
+              }}
+            >
+              <div
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  height: isMobile ? '50%' : '100%',
+                  borderRight: isMobile ? 'none' : '1px solid var(--as-border)',
+                  borderBottom: isMobile ? '1px solid var(--as-border)' : 'none',
+                  overflow: 'hidden',
+                }}
+              >
                 <EditorPane modeOverride="hybrid" />
               </div>
-              <div style={{ flex: 1, height: '100%' }}>
+              <div style={{ flex: 1, minWidth: 0, height: isMobile ? '50%' : '100%', overflow: 'hidden' }}>
                 <EditorPane modeOverride="source" />
               </div>
-            </>
+            </div>
           ) : (
-            <div style={{ flex: 1, height: '100%', overflow: 'hidden' }}>
+            <div style={{ flex: 1, minWidth: 0, height: '100%', overflow: 'hidden' }}>
               <EditorPane />
             </div>
           )}

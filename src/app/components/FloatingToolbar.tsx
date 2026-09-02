@@ -132,13 +132,20 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
     }
   };
 
+  const clampedLeft = typeof window !== 'undefined'
+    ? Math.max(140, Math.min(position.left, window.innerWidth - 140))
+    : position.left;
+  const clampedTop = Math.max(50, position.top);
+
   return (
     <div
       style={{
         position: 'fixed',
-        top: `${position.top}px`,
-        left: `${position.left}px`,
+        top: `${clampedTop}px`,
+        left: `${clampedLeft}px`,
         transform: 'translate(-50%, -100%) translateY(-10px)',
+        maxWidth: 'calc(100vw - 20px)',
+        overflowX: 'auto',
         zIndex: 9000,
         display: 'flex',
         alignItems: 'center',
