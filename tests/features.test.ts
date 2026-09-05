@@ -18,6 +18,7 @@ import { AsterismSearchPanel } from '../src/editor/search-panel';
 beforeAll(() => {
   const window = new GlobalWindow();
   (global as any).window = window;
+  (global as any).Window = window.constructor;
   (global as any).document = window.document;
   (global as any).HTMLElement = window.HTMLElement;
   (global as any).HTMLTextAreaElement = window.HTMLTextAreaElement;
@@ -25,6 +26,7 @@ beforeAll(() => {
   (global as any).navigator = window.navigator;
   (global as any).Event = window.Event;
   (global as any).KeyboardEvent = window.KeyboardEvent;
+  (global as any).MouseEvent = window.MouseEvent;
   (global as any).requestAnimationFrame = (cb: any) => setTimeout(cb, 0);
   (global as any).cancelAnimationFrame = (id: any) => clearTimeout(id);
 });
@@ -220,4 +222,157 @@ describe('New Editor Features & Formatting Keymaps', () => {
     panel.destroy();
     view.destroy();
   });
+
+  it('lineSelectionExtension isolates triple-clicks strictly to line.from and line.to without spilling', () => {
+    const text = 'Line One\nLine Two\n![Image](https://example.com/pic.png)\n\n\nLine Six';
+    const extensions = createEditorExtensions();
+    const state = EditorState.create({ doc: text, extensions });
+    const view = new EditorView({ state, parent: container });
+
+    // Find "Line Two"
+    const lineTwo = view.state.doc.line(2);
+    expect(lineTwo.text).toBe('Line Two');
+
+    view.dispatch({ selection: EditorSelection.cursor(lineTwo.from) });
+
+    // Simulate triple-click event on Line Two
+    const mousedownEvent = new MouseEvent('mousedown', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 20,
+      clientY: 30,
+      detail: 3, // triple click
+      button: 0,
+    });
+
+    // Invoke mouseSelectionStyle facet
+    const styles = view.state.facet(EditorView.mouseSelectionStyle);
+    expect(styles.length).toBeGreaterThan(0);
+
+    let handler: any = null;
+    for (const makeStyle of styles) {
+      handler = makeStyle(view, mousedownEvent);
+      if (handler) break;
+    }
+
+    expect(handler).not.toBeNull();
+    const selection = handler.get(mousedownEvent, false, false);
+    expect(selection.main.from).toBe(lineTwo.from);
+    // Crucial: to MUST be lineTwo.to, NOT lineTwo.to + 1 (which would spill into the image below)
+    expect(selection.main.to).toBe(lineTwo.to);
+    expect(selection.main.to).not.toBe(lineTwo.to + 1);
+
+    view.destroy();
+  });
+
+  it('buildBlockWidgets decorates standalone image lines with block: true', () => {
+    const { buildBlockWidgets } = require('../src/editor/widgets/plugin');
+    const doc = 'images can be pasted\n![Image](https://example.com/pic.png)\n\n\n';
+    const extensions = createEditorExtensions();
+    const state = EditorState.create({ doc, extensions });
+
+    const decos = buildBlockWidgets(state);
+    const iter = decos.iter();
+    let foundBlockImage = false;
+
+    while (iter.value) {
+      if (iter.value.spec.widget?.nodeName === 'Image') {
+        expect(iter.value.spec.block).toBe(true);
+        const line = state.doc.lineAt(iter.from);
+        expect(iter.from).toBe(line.from);
+        expect(iter.to).toBe(line.to);
+        foundBlockImage = true;
+      }
+      iter.next();
+    }
+
+    expect(foundBlockImage).toBe(true);
+  });
+
+  it('MarkdownWidget coordsAt returns tight bounded coordinates rather than blowing up selection', () => {
+    const { ImageWidget } = require('../src/editor/widgets/image');
+    const widget = new ImageWidget('![Pic](https://example.com/pic.png)', 0, 36);
+
+    const fakeDom = document.createElement('div');
+    fakeDom.getBoundingClientRect = () => ({
+      top: 100,
+      bottom: 620, // 520px tall
+      left: 50,
+      right: 450,
+      width: 400,
+      height: 520,
+      x: 50,
+      y: 100,
+      toJSON: () => {},
+    });
+
+    Object.defineProperty(fakeDom, 'isConnected', { value: true });
+
+    const coords = widget.coordsAt(fakeDom, 0, 1);
+    expect(coords).not.toBeNull();
+    expect(coords?.top).toBe(100);
+    // Bounded to 24px height, NOT 620px!
+    expect(coords?.bottom).toBe(124);
+  });
+
+  it('dragging horizontally past end of line clamps strictly to line.to', () => {
+    const text = 'images can be pasted\n![Image](https://example.com/pic.png)\n\n\nLine 5';
+    const extensions = createEditorExtensions();
+    const state = EditorState.create({ doc: text, extensions });
+    const view = new EditorView({ state, parent: container });
+
+    const lineOne = view.state.doc.line(1);
+    expect(lineOne.text).toBe('images can be pasted');
+
+    // Simulate mock coordsAtPos for testing layout clamp
+    const origCoordsAtPos = view.coordsAtPos.bind(view);
+    view.coordsAtPos = (pos: number) => {
+      if (pos === lineOne.from) {
+        return { top: 100, bottom: 120, left: 50, right: 50 };
+      }
+      if (pos === lineOne.to) {
+        return { top: 100, bottom: 120, left: 250, right: 250 };
+      }
+      return origCoordsAtPos(pos);
+    };
+
+    view.posAndSideAtCoords = () => ({ pos: 0, assoc: 1 });
+
+    view.dispatch({ selection: EditorSelection.cursor(lineOne.from) });
+
+    const mousedownEvent = new MouseEvent('mousedown', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 50,
+      clientY: 110,
+      detail: 1, // single click / drag
+      button: 0,
+    });
+
+    const styles = view.state.facet(EditorView.mouseSelectionStyle);
+    let handler: any = null;
+    for (const makeStyle of styles) {
+      handler = makeStyle(view, mousedownEvent);
+      if (handler) break;
+    }
+
+    expect(handler).not.toBeNull();
+
+    // Drag past end of line (clientX: 500 > 250), Y is 112 (on line)
+    const mousemoveEvent = new MouseEvent('mousemove', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 500,
+      clientY: 112,
+    });
+
+    const selection = handler.get(mousemoveEvent, false, false);
+    // Crucial: target is clamped to lineOne.to (20), NOT leaking to Line 5 or doc.length
+    expect(selection.main.from).toBe(lineOne.from);
+    expect(selection.main.to).toBe(lineOne.to);
+
+    view.destroy();
+  });
 });
+
+

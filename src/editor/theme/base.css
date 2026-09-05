@@ -1800,5 +1800,27 @@
   color: var(--as-accent);
 }
 
+/* CodeMirror Selection Layer & Highlighting */
+.cm-selectionBackground {
+  background: var(--as-selection, #cde4ff) !important;
+}
 
+.cm-focused .cm-selectionBackground {
+  background: var(--as-selection, #cde4ff) !important;
+}
 
+::selection {
+  background: var(--as-selection, #cde4ff);
+}
+
+/* Block Widgets Selection Isolation */
+.as-table-widget,
+.as-mermaid-container,
+.as-codeblock-container,
+.as-callout-widget,
+.as-image-widget,
+.as-hr-widget {
+  user-select: none;
+  position: relative;
+  z-index: 1;
+}

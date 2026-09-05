@@ -33,6 +33,27 @@ export abstract class MarkdownWidget extends WidgetType {
   }
 
   /**
+   * Return tight, bounded coordinates for selection calculations,
+   * preventing large block/image widgets from blowing up selection overlay rectangles.
+   */
+  override coordsAt(
+    dom: HTMLElement,
+    _pos: number,
+    side: number
+  ): { left: number; right: number; top: number; bottom: number } | null {
+    if (!dom || !dom.isConnected) return null;
+    const rect = dom.getBoundingClientRect();
+    if (!rect || (rect.width === 0 && rect.height === 0)) return null;
+    const x = side <= 0 ? rect.left : rect.right;
+    return {
+      left: x,
+      right: x,
+      top: rect.top,
+      bottom: rect.top + 24,
+    };
+  }
+
+  /**
    * Resolves the current document range of this widget, preventing stale offset drift.
    */
   resolveRange(view: EditorView, dom?: HTMLElement | null): { from: number; to: number } {

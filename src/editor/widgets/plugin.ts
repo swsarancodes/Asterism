@@ -84,12 +84,24 @@ export function buildBlockWidgets(state: EditorState): DecorationSet {
       // 6. Image Widget: ![alt](url)
       else if (name === 'Image') {
         const imageText = doc.sliceString(nodeFrom, nodeTo);
-        const widget = new ImageWidget(imageText, nodeFrom, nodeTo);
-        decos.push({
-          from: nodeFrom,
-          to: nodeTo,
-          deco: Decoration.replace({ widget }),
-        });
+        const line = doc.lineAt(nodeFrom);
+        const isWholeLine = line.text.trim() === imageText.trim();
+
+        if (isWholeLine) {
+          const widget = new ImageWidget(imageText, line.from, line.to);
+          decos.push({
+            from: line.from,
+            to: line.to,
+            deco: Decoration.replace({ widget, block: true }),
+          });
+        } else {
+          const widget = new ImageWidget(imageText, nodeFrom, nodeTo);
+          decos.push({
+            from: nodeFrom,
+            to: nodeTo,
+            deco: Decoration.replace({ widget }),
+          });
+        }
         return false;
       }
     },

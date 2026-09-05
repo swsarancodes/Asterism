@@ -8,6 +8,7 @@ import { createMarkdownExtension } from '../core/markdown/grammar';
 import { getModeExtensions, ViewMode } from './modes/view-mode';
 import { markdownFormattingKeymap } from './commands/formatting';
 import { delimiterGuard } from './decorations/delimiter-guard';
+import { lineSelectionExtension } from './decorations/line-selection';
 import { wikilinkAutocompleteExtension } from './completions/wikilink-completion';
 import { AsterismSearchPanel } from './search-panel';
 
@@ -380,6 +381,7 @@ export function createEditorExtensions(options: EditorSetupOptions = {}): Extens
     ...(mode === 'source' ? [foldGutter()] : []),
     history(),
     drawSelection(),
+    lineSelectionExtension(),
     dropCursor(),
     createMarkdownExtension(),
     ...getModeExtensions(mode),
