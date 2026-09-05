@@ -9,6 +9,7 @@ import { FloatingToolbar } from './FloatingToolbar';
 import { SlashCommandMenu } from './SlashCommandMenu';
 import { ImageModal } from './ImageModal';
 import { toggleInlineFormat, setHeadingLevel } from '../../editor/commands/formatting';
+import { openSearchPanel } from '@codemirror/search';
 import { Folder, FileText, Plus } from 'lucide-react';
 import { formatDisplayName } from '../../core/document/file-meta';
 
@@ -101,11 +102,37 @@ export const EditorPane: React.FC<EditorPaneProps> = ({ modeOverride }) => {
         e.preventDefault();
         e.stopPropagation();
         setHeadingLevel(viewRef.current, 3);
+      } else if (key === 'f' && !e.shiftKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        openSearchPanel(viewRef.current);
+        if (e.altKey) {
+          window.dispatchEvent(new CustomEvent('as:open-replace'));
+        }
+      }
+    };
+
+    const handleFindEvent = () => {
+      if (viewRef.current) {
+        openSearchPanel(viewRef.current);
+      }
+    };
+
+    const handleReplaceEvent = () => {
+      if (viewRef.current) {
+        openSearchPanel(viewRef.current);
+        window.dispatchEvent(new CustomEvent('as:open-replace'));
       }
     };
 
     window.addEventListener('keydown', handleGlobalShortcuts, true);
-    return () => window.removeEventListener('keydown', handleGlobalShortcuts, true);
+    window.addEventListener('as:open-find', handleFindEvent);
+    window.addEventListener('as:open-replace-request', handleReplaceEvent);
+    return () => {
+      window.removeEventListener('keydown', handleGlobalShortcuts, true);
+      window.removeEventListener('as:open-find', handleFindEvent);
+      window.removeEventListener('as:open-replace-request', handleReplaceEvent);
+    };
   }, []);
 
   // Initialize and update CodeMirror EditorView on activeDocId or effectiveMode change

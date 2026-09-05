@@ -2,13 +2,14 @@ import { EditorState, Extension, Prec, RangeSetBuilder } from '@codemirror/state
 import { EditorView, keymap, drawSelection, dropCursor, ViewPlugin, ViewUpdate, Decoration, DecorationSet } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { syntaxTree, codeFolding, foldGutter, foldKeymap } from '@codemirror/language';
-import { search, searchKeymap, highlightSelectionMatches } from '@codemirror/search';
+import { search, searchKeymap, highlightSelectionMatches, openSearchPanel } from '@codemirror/search';
 import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 import { createMarkdownExtension } from '../core/markdown/grammar';
 import { getModeExtensions, ViewMode } from './modes/view-mode';
 import { markdownFormattingKeymap } from './commands/formatting';
 import { delimiterGuard } from './decorations/delimiter-guard';
 import { wikilinkAutocompleteExtension } from './completions/wikilink-completion';
+import { AsterismSearchPanel } from './search-panel';
 
 export interface EditorSetupOptions {
   initialDoc?: string;
@@ -387,14 +388,32 @@ export function createEditorExtensions(options: EditorSetupOptions = {}): Extens
     smartPasteLinkExtension(),
     clickLinkExtension(),
     wikilinkAutocompleteExtension,
-    search({ top: true }),
+    search({
+      top: true,
+      createPanel: (view) => new AsterismSearchPanel(view),
+    }),
     highlightSelectionMatches(),
     closeBrackets(),
     typewriterExtension(options.typewriterMode),
     focusModeExtension(options.focusMode),
     updateListener,
     Prec.highest(keymap.of(markdownFormattingKeymap)),
-    keymap.of([...closeBracketsKeymap, ...searchKeymap, ...defaultKeymap, ...historyKeymap, ...foldKeymap]),
+    keymap.of([
+      {
+        key: 'Mod-Alt-f',
+        run: (view) => {
+          openSearchPanel(view);
+          window.dispatchEvent(new CustomEvent('as:open-replace'));
+          return true;
+        },
+        scope: 'editor',
+      },
+      ...closeBracketsKeymap,
+      ...searchKeymap,
+      ...defaultKeymap,
+      ...historyKeymap,
+      ...foldKeymap,
+    ]),
     EditorView.lineWrapping,
   ];
 }

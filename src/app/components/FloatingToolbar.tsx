@@ -87,6 +87,8 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
     }
   }, [openLinkRequested]);
 
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
   // Focus the URL input field when the link popover opens
   useEffect(() => {
     if (linkInputOpen) {
@@ -104,6 +106,18 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
       setDropdownOpen(false);
     }
   }, [position]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!dropdownOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    };
+    window.addEventListener('mousedown', handleClickOutside);
+    return () => window.removeEventListener('mousedown', handleClickOutside);
+  }, [dropdownOpen]);
 
   if (!view || !position) return null;
 
@@ -137,31 +151,36 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
     }
   };
 
-  const clampedLeft = typeof window !== 'undefined'
-    ? Math.max(140, Math.min(position.left, window.innerWidth - 140))
-    : position.left;
-  const clampedTop = Math.max(50, position.top);
+  const isBrowser = typeof window !== 'undefined';
+  const screenWidth = isBrowser ? window.innerWidth : 800;
+  const screenHeight = isBrowser ? window.innerHeight : 600;
+
+  // Responsive horizontal clamping so toolbar never bleeds offscreen
+  const toolbarEstimatedWidth = linkInputOpen ? 340 : 420;
+  const halfWidth = toolbarEstimatedWidth / 2;
+  const clampedLeft = Math.max(halfWidth + 10, Math.min(position.left, screenWidth - halfWidth - 10));
+
+  // If selection is near top of viewport (< 75px), flip toolbar BELOW the selection!
+  const isNearTop = position.top < 75;
+  const clampedTop = isNearTop ? position.top + 30 : position.top;
+  const transformStyle = isNearTop
+    ? 'translate(-50%, 0)'
+    : 'translate(-50%, -100%) translateY(-8px)';
+
+  // Flip dropdown upwards if toolbar is in lower portion of viewport
+  const dropdownOpensUpward = !isNearTop && clampedTop + 350 > screenHeight;
 
   return (
     <div
+      className="as-floating-toolbar"
       style={{
         position: 'fixed',
         top: `${clampedTop}px`,
         left: `${clampedLeft}px`,
-        transform: 'translate(-50%, -100%) translateY(-10px)',
+        transform: transformStyle,
         maxWidth: 'calc(100vw - 20px)',
-        overflowX: 'auto',
-        zIndex: 9000,
-        display: 'flex',
-        alignItems: 'center',
-        gap: '2px',
-        backgroundColor: 'var(--as-bg-surface)',
-        border: '1px solid var(--as-border)',
-        borderRadius: 'var(--as-radius-md)',
-        boxShadow: 'var(--as-shadow-lg)',
+        overflow: 'visible',
         padding: linkInputOpen ? '4px 6px' : '3px 5px',
-        animation: 'popIn 0.15s cubic-bezier(0.16, 1, 0.3, 1) both',
-        userSelect: 'none',
       }}
       onMouseDown={(e) => {
         // Prevent losing editor selection when clicking buttons, but allow typing in input
@@ -283,50 +302,18 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
         /* Standard Floating Bubble Toolbar */
         <>
           {/* Block Type Switcher Dropdown */}
-          <div style={{ position: 'relative' }}>
+          <div ref={dropdownRef} style={{ position: 'relative' }}>
             <button
               type="button"
+              className={`as-turn-into-btn ${dropdownOpen ? 'is-active' : ''}`}
               onClick={() => setDropdownOpen(!dropdownOpen)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '3px',
-                padding: '4px 7px',
-                fontSize: '12px',
-                fontWeight: 550,
-                color: 'var(--as-text)',
-                backgroundColor: 'transparent',
-                border: 'none',
-                borderRadius: 'var(--as-radius-sm)',
-                cursor: 'pointer',
-                transition: 'background var(--as-transition-fast)',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--as-bg-hover)')}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
             >
               <span>Turn into</span>
-              <ChevronDown size={12} style={{ color: 'var(--as-text-muted)' }} />
+              <ChevronDown size={12} className="as-chevron" />
             </button>
 
             {dropdownOpen && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '100%',
-                  left: 0,
-                  marginTop: '4px',
-                  width: '160px',
-                  backgroundColor: 'var(--as-bg-surface)',
-                  border: '1px solid var(--as-border)',
-                  borderRadius: 'var(--as-radius-md)',
-                  boxShadow: 'var(--as-shadow-md)',
-                  padding: '4px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '1px',
-                  zIndex: 9001,
-                }}
-              >
+              <div className={`as-turn-into-dropdown ${dropdownOpensUpward ? 'open-up' : 'open-down'}`}>
                 {[
                   { label: 'Paragraph', icon: null, action: () => setHeadingLevel(view, 0) },
                   { label: 'Heading 1', icon: Heading1, action: () => setHeadingLevel(view, 1) },
@@ -344,27 +331,13 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
                     <button
                       key={idx}
                       type="button"
+                      className="as-dropdown-item"
                       onClick={() => {
                         item.action();
                         setDropdownOpen(false);
                       }}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        padding: '6px 8px',
-                        fontSize: '12.5px',
-                        color: 'var(--as-text)',
-                        backgroundColor: 'transparent',
-                        border: 'none',
-                        borderRadius: 'var(--as-radius-sm)',
-                        cursor: 'pointer',
-                        textAlign: 'left',
-                      }}
-                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--as-bg-hover)')}
-                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                     >
-                      {Icon && <Icon size={14} style={{ color: 'var(--as-text-muted)' }} />}
+                      {Icon && <Icon size={14} />}
                       <span>{item.label}</span>
                     </button>
                   );

@@ -136,6 +136,26 @@ export const CommandPalette: React.FC = () => {
       run: () => toggleOutline(),
     },
     {
+      id: 'doc-find',
+      title: 'Find in Document',
+      category: 'Edit',
+      icon: Search,
+      shortcut: '⌘F',
+      run: () => {
+        window.dispatchEvent(new CustomEvent('as:open-find'));
+      },
+    },
+    {
+      id: 'doc-replace',
+      title: 'Find and Replace in Document',
+      category: 'Edit',
+      icon: Search,
+      shortcut: '⌥⌘F',
+      run: () => {
+        window.dispatchEvent(new CustomEvent('as:open-replace-request'));
+      },
+    },
+    {
       id: 'workspace-search',
       title: 'Search All Notes in Workspace',
       category: 'Navigation',

@@ -13,6 +13,7 @@ import {
 } from '../src/editor/commands/formatting';
 import { createEditorState, createEditorExtensions } from '../src/editor/setup';
 import { setSearchQuery, SearchQuery } from '@codemirror/search';
+import { AsterismSearchPanel } from '../src/editor/search-panel';
 
 beforeAll(() => {
   const window = new GlobalWindow();
@@ -185,6 +186,38 @@ describe('New Editor Features & Formatting Keymaps', () => {
     // Simulate moving cursor
     view.dispatch({ selection: EditorSelection.cursor(20) });
     expect(view.state.selection.main.head).toBe(20);
+    view.destroy();
+  });
+
+  it('AsterismSearchPanel creates floating UI, matches query, and computes match count', () => {
+    const text = 'Alpha Beta Alpha Gamma Alpha';
+    const extensions = createEditorExtensions();
+    const state = EditorState.create({ doc: text, extensions });
+    const view = new EditorView({ state, parent: container });
+
+    const panel = new AsterismSearchPanel(view);
+    expect(panel.dom).not.toBeNull();
+    expect(panel.dom.className).toContain('as-search-panel');
+
+    // Mount panel
+    panel.mount();
+
+    const searchInput = panel.dom.querySelector('input[name="search"]') as HTMLInputElement;
+    expect(searchInput).not.toBeNull();
+
+    // Type query
+    searchInput.value = 'Alpha';
+    searchInput.dispatchEvent(new Event('input'));
+
+    const counter = panel.dom.querySelector('.as-search-counter') as HTMLSpanElement;
+    expect(counter.textContent).toContain('of 3');
+
+    // Test Case Sensitive toggle
+    const caseBtn = panel.dom.querySelector('.as-toggle-case') as HTMLButtonElement;
+    caseBtn.click();
+    expect(caseBtn.className).toContain('is-active');
+
+    panel.destroy();
     view.destroy();
   });
 });
