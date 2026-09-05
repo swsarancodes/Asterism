@@ -331,6 +331,19 @@
   opacity: 0.6;
 }
 
+.as-highlight {
+  background-color: rgba(250, 204, 21, 0.28);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0.1em 0.3em;
+  margin: 0 1px;
+}
+
+[data-theme="dark"] .as-highlight {
+  background-color: rgba(234, 179, 8, 0.24);
+  color: #fef08a;
+}
+
 .as-code-inline {
   font-family: var(--as-font-mono);
   font-size: 0.88em;
@@ -1062,5 +1075,78 @@
     break-inside: avoid !important;
   }
 }
+
+/* CodeMirror Search Panel */
+.cm-panel.cm-search {
+  background-color: var(--as-bg-surface);
+  color: var(--as-text);
+  border-bottom: 1px solid var(--as-border);
+  padding: 8px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--as-font-body);
+  font-size: 12.5px;
+  box-shadow: var(--as-shadow-md);
+  z-index: 50;
+}
+
+.cm-panel.cm-search input.cm-textfield {
+  background-color: var(--as-bg);
+  color: var(--as-text);
+  border: 1px solid var(--as-border);
+  border-radius: var(--as-radius-sm, 6px);
+  padding: 4px 8px;
+  font-size: 12.5px;
+  outline: none;
+  font-family: var(--as-font-mono);
+}
+
+.cm-panel.cm-search input.cm-textfield:focus {
+  border-color: var(--as-accent);
+}
+
+.cm-panel.cm-search button.cm-button {
+  background-color: var(--as-bg-subtle);
+  color: var(--as-text);
+  border: 1px solid var(--as-border);
+  border-radius: var(--as-radius-sm, 6px);
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all var(--as-transition-fast);
+}
+
+.cm-panel.cm-search button.cm-button:hover {
+  background-color: var(--as-bg-hover);
+}
+
+.cm-panel.cm-search label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  color: var(--as-text-muted);
+  font-size: 11.5px;
+}
+
+.cm-searchMatch {
+  background-color: rgba(234, 179, 8, 0.3) !important;
+  border-radius: 2px;
+}
+
+.cm-searchMatch-selected {
+  background-color: var(--as-accent) !important;
+  color: #ffffff !important;
+  border-radius: 2px;
+}
+
+/* Focus Mode Dimming */
+.cm-line.as-dimmed-line {
+  opacity: 0.28 !important;
+  transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 
 

@@ -16,6 +16,10 @@ export const StatusBar: React.FC = () => {
 
   const theme = useSettingsStore((s) => s.theme);
   const setTheme = useSettingsStore((s) => s.setTheme);
+  const typewriterMode = useSettingsStore((s) => s.typewriterMode);
+  const toggleTypewriter = useSettingsStore((s) => s.toggleTypewriter);
+  const focusMode = useSettingsStore((s) => s.focusMode);
+  const setFocusMode = useSettingsStore((s) => s.setFocusMode);
 
   const toggleTheme = () => {
     setTheme(theme === 'light' ? 'dark' : 'light');
@@ -57,8 +61,55 @@ export const StatusBar: React.FC = () => {
         <span className="as-status-extra">{readingTime} min read</span>
       </div>
 
-      {/* Right side: cursor coordinates, encoding, theme */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+      {/* Right side: cursor coordinates, typewriter/focus mode, encoding, theme */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+        {/* Typewriter mode toggle */}
+        <button
+          type="button"
+          onClick={toggleTypewriter}
+          title={`Typewriter Mode: ${typewriterMode ? 'Active (Centered)' : 'Off'}`}
+          style={{
+            background: typewriterMode ? 'var(--as-accent-subtle)' : 'none',
+            border: typewriterMode ? '1px solid var(--as-accent)' : 'none',
+            borderRadius: 'var(--as-radius-sm)',
+            color: typewriterMode ? 'var(--as-accent)' : 'var(--as-text-muted)',
+            cursor: 'pointer',
+            padding: '1px 5px',
+            fontSize: '11px',
+            fontWeight: typewriterMode ? 600 : 400,
+            display: 'flex',
+            alignItems: 'center',
+          }}
+        >
+          Typewriter
+        </button>
+
+        {/* Focus mode toggle */}
+        <button
+          type="button"
+          onClick={() => {
+            const next = focusMode === 'off' ? 'paragraph' : focusMode === 'paragraph' ? 'sentence' : 'off';
+            setFocusMode(next);
+          }}
+          title={`Focus Mode: ${focusMode.toUpperCase()} (Click to cycle)`}
+          style={{
+            background: focusMode !== 'off' ? 'var(--as-accent-subtle)' : 'none',
+            border: focusMode !== 'off' ? '1px solid var(--as-accent)' : 'none',
+            borderRadius: 'var(--as-radius-sm)',
+            color: focusMode !== 'off' ? 'var(--as-accent)' : 'var(--as-text-muted)',
+            cursor: 'pointer',
+            padding: '1px 5px',
+            fontSize: '11px',
+            fontWeight: focusMode !== 'off' ? 600 : 400,
+            display: 'flex',
+            alignItems: 'center',
+          }}
+        >
+          Focus{focusMode !== 'off' ? `: ${focusMode}` : ''}
+        </button>
+
+        <span className="as-status-extra">•</span>
+
         <span>
           Ln {line}, Col {col}
         </span>

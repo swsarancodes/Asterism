@@ -1,7 +1,9 @@
-import { EditorState, Extension, Prec } from '@codemirror/state';
-import { EditorView, keymap, drawSelection, dropCursor } from '@codemirror/view';
+import { EditorState, Extension, Prec, RangeSetBuilder } from '@codemirror/state';
+import { EditorView, keymap, drawSelection, dropCursor, ViewPlugin, ViewUpdate, Decoration, DecorationSet } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { syntaxTree, codeFolding, foldGutter, foldKeymap } from '@codemirror/language';
+import { search, searchKeymap, highlightSelectionMatches } from '@codemirror/search';
+import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 import { createMarkdownExtension } from '../core/markdown/grammar';
 import { getModeExtensions, ViewMode } from './modes/view-mode';
 import { markdownFormattingKeymap } from './commands/formatting';
@@ -11,6 +13,8 @@ import { wikilinkAutocompleteExtension } from './completions/wikilink-completion
 export interface EditorSetupOptions {
   initialDoc?: string;
   mode?: ViewMode;
+  typewriterMode?: boolean;
+  focusMode?: 'off' | 'sentence' | 'paragraph';
   onDocChange?: (newDoc: string) => void;
   onCursorChange?: (line: number, col: number, selectionCount: number) => void;
 }
@@ -261,6 +265,98 @@ export function clickLinkExtension(): Extension {
   });
 }
 
+/**
+ * Typewriter Mode Extension:
+ * Keeps the caret vertically centered at ~42% of the editor viewport during typing.
+ */
+export function typewriterExtension(enabled: boolean = false): Extension {
+  if (!enabled) return [];
+  return EditorView.updateListener.of((update) => {
+    if (
+      (update.docChanged || update.selectionSet) &&
+      update.view.hasFocus &&
+      update.state.selection.main.empty
+    ) {
+      requestAnimationFrame(() => {
+        const view = update.view;
+        if (!view || !view.dom.isConnected) return;
+        const head = view.state.selection.main.head;
+        const coords = view.coordsAtPos(head);
+        if (!coords) return;
+        const scrollDOM = view.scrollDOM;
+        const rect = scrollDOM.getBoundingClientRect();
+        const targetY = rect.top + rect.height * 0.42;
+        const diff = coords.top - targetY;
+        if (Math.abs(diff) > 8) {
+          scrollDOM.scrollTop += diff;
+        }
+      });
+    }
+  });
+}
+
+/**
+ * Focus Mode Extension:
+ * Dims inactive lines/paragraphs with smooth transition so the author can focus.
+ */
+export function focusModeExtension(mode: 'off' | 'sentence' | 'paragraph' = 'off'): Extension {
+  if (mode === 'off') return [];
+  return ViewPlugin.fromClass(
+    class {
+      decorations: DecorationSet;
+      constructor(view: EditorView) {
+        this.decorations = this.compute(view);
+      }
+      update(update: ViewUpdate) {
+        if (update.selectionSet || update.docChanged || update.viewportChanged) {
+          this.decorations = this.compute(update.view);
+        }
+      }
+      compute(view: EditorView): DecorationSet {
+        const head = view.state.selection.main.head;
+        const activeLine = view.state.doc.lineAt(head);
+        const builder = new RangeSetBuilder<Decoration>();
+        const dimmedDeco = Decoration.line({ class: 'as-dimmed-line' });
+
+        for (const { from, to } of view.visibleRanges) {
+          let pos = from;
+          while (pos <= to) {
+            const line = view.state.doc.lineAt(pos);
+            let isFocused = false;
+            if (mode === 'paragraph') {
+              if (line.number === activeLine.number) {
+                isFocused = true;
+              } else if (line.text.trim() !== '' && activeLine.text.trim() !== '') {
+                const minL = Math.min(line.number, activeLine.number);
+                const maxL = Math.max(line.number, activeLine.number);
+                let contiguous = true;
+                for (let l = minL; l <= maxL; l++) {
+                  if (view.state.doc.line(l).text.trim() === '') {
+                    contiguous = false;
+                    break;
+                  }
+                }
+                isFocused = contiguous;
+              }
+            } else {
+              isFocused = line.number === activeLine.number;
+            }
+
+            if (!isFocused && line.text.trim().length > 0) {
+              builder.add(line.from, line.from, dimmedDeco);
+            }
+            pos = line.to + 1;
+          }
+        }
+        return builder.finish();
+      }
+    },
+    {
+      decorations: (v) => v.decorations,
+    }
+  );
+}
+
 export function createEditorExtensions(options: EditorSetupOptions = {}): Extension[] {
   const mode = options.mode || 'hybrid';
 
@@ -291,9 +387,14 @@ export function createEditorExtensions(options: EditorSetupOptions = {}): Extens
     smartPasteLinkExtension(),
     clickLinkExtension(),
     wikilinkAutocompleteExtension,
+    search({ top: true }),
+    highlightSelectionMatches(),
+    closeBrackets(),
+    typewriterExtension(options.typewriterMode),
+    focusModeExtension(options.focusMode),
     updateListener,
     Prec.highest(keymap.of(markdownFormattingKeymap)),
-    keymap.of([...defaultKeymap, ...historyKeymap, ...foldKeymap]),
+    keymap.of([...closeBracketsKeymap, ...searchKeymap, ...defaultKeymap, ...historyKeymap, ...foldKeymap]),
     EditorView.lineWrapping,
   ];
 }

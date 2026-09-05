@@ -41,10 +41,10 @@ export const TabBar: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [exportMenuOpen]);
 
-  // Global shortcut for PDF Export / Print (⌘P)
+  // Global shortcut for PDF Export / Print (⌥⌘P / Ctrl+Alt+P)
   React.useEffect(() => {
     const handlePrint = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && (e.key === 'p' || e.key === 'P')) {
+      if ((e.metaKey || e.ctrlKey) && e.altKey && (e.key === 'p' || e.key === 'P')) {
         e.preventDefault();
         exportToPdf();
       }
@@ -446,7 +446,7 @@ export const TabBar: React.FC = () => {
             type="button"
             className="as-tabbar-action-btn"
             onClick={() => setExportMenuOpen(!exportMenuOpen)}
-            title="Export Document (⌘P for PDF)"
+            title="Export Document (⌥⌘P for PDF)"
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -523,7 +523,7 @@ export const TabBar: React.FC = () => {
                 onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
               >
                 <Printer size={13} style={{ color: 'var(--as-accent)' }} />
-                <span>Export PDF (⌘P)</span>
+                <span>Export PDF (⌥⌘P)</span>
               </button>
               <button
                 type="button"

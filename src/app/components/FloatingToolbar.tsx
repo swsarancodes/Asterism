@@ -19,6 +19,9 @@ import {
   ChevronDown,
   Workflow,
   Table as TableIcon,
+  Highlighter,
+  Quote,
+  Sigma,
 } from 'lucide-react';
 import {
   toggleInlineFormat,
@@ -26,6 +29,8 @@ import {
   setBulletList,
   setNumberedList,
   setTaskList,
+  setBlockquote,
+  insertMathTemplate,
   insertMermaidTemplate,
   insertTableTemplate,
   wrapWithLink,
@@ -330,6 +335,7 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
                   { label: 'Bulleted List', icon: List, action: () => setBulletList(view) },
                   { label: 'Numbered List', icon: ListOrdered, action: () => setNumberedList(view) },
                   { label: 'To-do List', icon: CheckSquare, action: () => setTaskList(view) },
+                  { label: 'Quote', icon: Quote, action: () => setBlockquote(view) },
                   { label: 'Table', icon: TableIcon, action: () => insertTableTemplate(view) },
                   { label: 'Mermaid Diagram', icon: Workflow, action: () => insertMermaidTemplate(view) },
                 ].map((item, idx) => {
@@ -405,6 +411,18 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
             <Strikethrough size={14} />
           </button>
 
+          {/* Highlight */}
+          <button
+            type="button"
+            title="Highlight (==text==)"
+            onClick={() => toggleInlineFormat(view, '==')}
+            style={toolbarBtnStyle}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--as-bg-hover)')}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+          >
+            <Highlighter size={14} />
+          </button>
+
           {/* Inline Code */}
           <button
             type="button"
@@ -415,6 +433,30 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
           >
             <Code size={14} />
+          </button>
+
+          {/* Math Formula */}
+          <button
+            type="button"
+            title="Insert Math ($formula$)"
+            onClick={() => insertMathTemplate(view, false)}
+            style={toolbarBtnStyle}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--as-bg-hover)')}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+          >
+            <Sigma size={14} />
+          </button>
+
+          {/* Quote */}
+          <button
+            type="button"
+            title="Quote (> item)"
+            onClick={() => setBlockquote(view)}
+            style={toolbarBtnStyle}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--as-bg-hover)')}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+          >
+            <Quote size={14} />
           </button>
 
           {/* Link */}

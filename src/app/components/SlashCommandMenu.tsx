@@ -21,6 +21,9 @@ import {
   Italic,
   Strikethrough,
   Image as ImageIcon,
+  Quote,
+  Sigma,
+  Highlighter,
 } from 'lucide-react';
 import { useWorkspaceStore } from '../stores/workspace';
 import { formatDisplayName } from '../../core/document/file-meta';
@@ -29,6 +32,8 @@ import {
   setBulletList,
   setNumberedList,
   setTaskList,
+  setBlockquote,
+  insertMathTemplate,
   insertTableTemplate,
   insertMermaidTemplate,
   insertSequenceTemplate,
@@ -47,6 +52,7 @@ export interface SlashMenuProps {
   position: { top: number; left: number } | null;
   slashRange: { from: number; to: number } | null;
   onClose: () => void;
+  onOpenImageModal?: (range: { from: number; to: number }) => void;
 }
 
 interface SlashItem {
@@ -65,6 +71,7 @@ export const SlashCommandMenu: React.FC<SlashMenuProps> = ({
   position,
   slashRange,
   onClose,
+  onOpenImageModal,
 }) => {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
@@ -125,6 +132,14 @@ export const SlashCommandMenu: React.FC<SlashMenuProps> = ({
       category: 'Basic',
       icon: CheckSquare,
       action: (v, r) => setTaskList(v, r),
+    },
+    {
+      id: 'quote',
+      title: 'Quote',
+      description: 'Capture a quote or citation (> quote)',
+      category: 'Basic',
+      icon: Quote,
+      action: (v, r) => setBlockquote(v, r),
     },
     {
       id: 'link',
@@ -209,33 +224,67 @@ export const SlashCommandMenu: React.FC<SlashMenuProps> = ({
       },
     },
     {
+      id: 'highlight',
+      title: 'Highlight',
+      description: 'Highlight text (==highlighted text==)',
+      category: 'Basic',
+      icon: Highlighter,
+      action: (v, r) => {
+        const text = '==highlighted text==';
+        v.dispatch({
+          changes: { from: r.from, to: r.to, insert: text },
+          selection: { anchor: r.from + 2, head: r.from + 18 },
+        });
+      },
+    },
+    {
       id: 'image',
       title: 'Image',
       description: 'Upload or embed an image from file or URL',
       category: 'Media & Widgets',
       icon: ImageIcon,
       action: (v, r) => {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'image/*';
-        input.onchange = (e: any) => {
-          const file = e.target?.files?.[0];
-          if (file) {
-            const reader = new FileReader();
-            reader.onload = () => {
-              const dataUrl = reader.result as string;
-              const cleanName = file.name ? file.name.replace(/\.[^/.]+$/, '') : 'Image';
-              const imageMd = `![${cleanName}](${dataUrl})\n`;
-              v.dispatch({
-                changes: { from: r.from, to: r.to, insert: imageMd },
-                selection: { anchor: r.from + imageMd.length },
-              });
-            };
-            reader.readAsDataURL(file);
-          }
-        };
-        input.click();
+        if (onOpenImageModal) {
+          onOpenImageModal(r);
+        } else {
+          const input = document.createElement('input');
+          input.type = 'file';
+          input.accept = 'image/*';
+          input.onchange = (e: any) => {
+            const file = e.target?.files?.[0];
+            if (file) {
+              const reader = new FileReader();
+              reader.onload = () => {
+                const dataUrl = reader.result as string;
+                const cleanName = file.name ? file.name.replace(/\.[^/.]+$/, '') : 'Image';
+                const imageMd = `![${cleanName}](${dataUrl})\n`;
+                v.dispatch({
+                  changes: { from: r.from, to: r.to, insert: imageMd },
+                  selection: { anchor: r.from + imageMd.length },
+                });
+              };
+              reader.readAsDataURL(file);
+            }
+          };
+          input.click();
+        }
       },
+    },
+    {
+      id: 'math-inline',
+      title: 'Inline Formula',
+      description: 'Inline LaTeX mathematical expression ($E = mc^2$)',
+      category: 'Media & Widgets',
+      icon: Sigma,
+      action: (v, r) => insertMathTemplate(v, false, r),
+    },
+    {
+      id: 'math-block',
+      title: 'Math Equation',
+      description: 'Display block LaTeX mathematical equation ($$...$$)',
+      category: 'Media & Widgets',
+      icon: Sigma,
+      action: (v, r) => insertMathTemplate(v, true, r),
     },
     {
       id: 'table',
@@ -355,8 +404,8 @@ export const SlashCommandMenu: React.FC<SlashMenuProps> = ({
     ? Math.max(10, Math.min(position.left, window.innerWidth - 305))
     : position.left;
   const menuTop = typeof window !== 'undefined'
-    ? Math.max(10, Math.min(position.top + 24, window.innerHeight - 350))
-    : position.top + 24;
+    ? Math.max(10, Math.min(position.top + 4, window.innerHeight - 350))
+    : position.top + 4;
 
   return (
     <div

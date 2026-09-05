@@ -1,8 +1,24 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useWorkspaceStore } from '../stores/workspace';
 import { useSettingsStore } from '../stores/settings';
-import { Search, Eye, Code, Columns, Moon, Sun, Plus, FileText, PanelLeft } from 'lucide-react';
+import {
+  Search,
+  Eye,
+  Code,
+  Columns,
+  Moon,
+  Sun,
+  Plus,
+  FileText,
+  PanelLeft,
+  ListTree,
+  Printer,
+  FileDown,
+  Sliders,
+  AlignLeft,
+} from 'lucide-react';
 import { formatDisplayName } from '../../core/document/file-meta';
+import { exportToPdf, exportToMarkdown, exportToHtml } from '../../core/document/export';
 
 interface CommandItem {
   id: string;
@@ -23,6 +39,12 @@ export const CommandPalette: React.FC = () => {
   const theme = useSettingsStore((s) => s.theme);
   const setTheme = useSettingsStore((s) => s.setTheme);
   const toggleSidebar = useSettingsStore((s) => s.toggleSidebar);
+  const toggleOutline = useSettingsStore((s) => s.toggleOutline);
+  const toggleSearchModal = useSettingsStore((s) => s.toggleSearchModal);
+  const typewriterMode = useSettingsStore((s) => s.typewriterMode);
+  const toggleTypewriter = useSettingsStore((s) => s.toggleTypewriter);
+  const focusMode = useSettingsStore((s) => s.focusMode);
+  const setFocusMode = useSettingsStore((s) => s.setFocusMode);
 
   const createEmpty = useWorkspaceStore((s) => s.createEmptyDocument);
   const setActiveDoc = useWorkspaceStore((s) => s.setActiveDocument);
@@ -52,12 +74,19 @@ export const CommandPalette: React.FC = () => {
       } else if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
         e.preventDefault();
         createEmpty();
+      } else if ((e.metaKey || e.ctrlKey) && e.altKey && (e.key === 't' || e.key === 'T')) {
+        e.preventDefault();
+        toggleTypewriter();
+      } else if ((e.metaKey || e.ctrlKey) && e.altKey && (e.key === 'f' || e.key === 'F')) {
+        e.preventDefault();
+        const next = focusMode === 'off' ? 'paragraph' : focusMode === 'paragraph' ? 'sentence' : 'off';
+        setFocusMode(next);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [open, setMode, toggleSidebar, createEmpty]);
+  }, [open, setMode, toggleSidebar, createEmpty, toggleTypewriter, focusMode, setFocusMode]);
 
   useEffect(() => {
     if (open) {
@@ -99,12 +128,79 @@ export const CommandPalette: React.FC = () => {
       run: () => toggleSidebar(),
     },
     {
+      id: 'toggle-outline',
+      title: 'Toggle Document Outline',
+      category: 'Layout',
+      icon: ListTree,
+      shortcut: '⌘⇧O',
+      run: () => toggleOutline(),
+    },
+    {
+      id: 'workspace-search',
+      title: 'Search All Notes in Workspace',
+      category: 'Navigation',
+      icon: Search,
+      shortcut: '⌘⇧F',
+      run: () => toggleSearchModal(),
+    },
+    {
+      id: 'toggle-typewriter',
+      title: `Toggle Typewriter Mode (${typewriterMode ? 'Active' : 'Disabled'})`,
+      category: 'Writing Environment',
+      icon: AlignLeft,
+      shortcut: '⌥⌘T',
+      run: () => toggleTypewriter(),
+    },
+    {
+      id: 'toggle-focus',
+      title: `Cycle Focus Mode (Currently ${focusMode.toUpperCase()})`,
+      category: 'Writing Environment',
+      icon: Sliders,
+      shortcut: '⌥⌘F',
+      run: () => {
+        const next = focusMode === 'off' ? 'paragraph' : focusMode === 'paragraph' ? 'sentence' : 'off';
+        setFocusMode(next);
+      },
+    },
+    {
       id: 'new-doc',
       title: 'Create New Document',
       category: 'File',
       icon: Plus,
       shortcut: '⌘N',
       run: () => createEmpty(),
+    },
+    {
+      id: 'export-pdf',
+      title: 'Export Document to PDF',
+      category: 'Export',
+      icon: Printer,
+      shortcut: '⌥⌘P',
+      run: () => exportToPdf(),
+    },
+    {
+      id: 'export-md',
+      title: 'Save Document as Markdown (.md)',
+      category: 'Export',
+      icon: FileDown,
+      run: () => {
+        const doc = useWorkspaceStore.getState().documents.find(
+          (d) => d.id === useWorkspaceStore.getState().activeDocumentId
+        );
+        if (doc) exportToMarkdown(doc.meta.fileName, doc.currentText);
+      },
+    },
+    {
+      id: 'export-html',
+      title: 'Export Document to HTML (.html)',
+      category: 'Export',
+      icon: FileText,
+      run: () => {
+        const doc = useWorkspaceStore.getState().documents.find(
+          (d) => d.id === useWorkspaceStore.getState().activeDocumentId
+        );
+        if (doc) exportToHtml(doc.meta.fileName, doc.currentText);
+      },
     },
     {
       id: 'toggle-theme',

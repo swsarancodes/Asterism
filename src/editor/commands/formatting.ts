@@ -338,11 +338,43 @@ export function toggleTaskCompletion(view: EditorView): boolean {
 /**
  * Formats all selected lines into a quote / blockquote (> item)
  */
-export function setBlockquote(view: EditorView) {
+/**
+ * Formats all selected lines into a quote / blockquote (> item)
+ * If all selected lines are already blockquotes, toggles them back to plain text.
+ */
+export function setBlockquote(view: EditorView, range?: { from: number; to: number }) {
   const { state } = view;
-  const sel = state.selection.main;
-  const startLine = state.doc.lineAt(sel.from);
-  const endLine = state.doc.lineAt(sel.to);
+  const selFrom = range ? range.from : state.selection.main.from;
+  const selTo = range ? range.to : state.selection.main.to;
+  const startLine = state.doc.lineAt(selFrom);
+  const endLine = state.doc.lineAt(selTo);
+
+  // Single line case
+  if (startLine.number === endLine.number) {
+    const lineText = startLine.text;
+    const isQuote = /^\s*>\s?/.test(lineText);
+    const clean = range
+      ? cleanLinePrefix(lineText.slice(0, range.from - startLine.from) + lineText.slice(range.to - startLine.from)).trim()
+      : cleanLinePrefix(lineText);
+
+    const newLine = isQuote && !range ? clean : `> ${clean}`;
+    view.dispatch({
+      changes: { from: startLine.from, to: startLine.to, insert: newLine },
+      selection: { anchor: startLine.from + newLine.length },
+    });
+    view.focus();
+    return;
+  }
+
+  // Multi-line selection
+  let allQuotes = true;
+  for (let l = startLine.number; l <= endLine.number; l++) {
+    const lineText = state.doc.line(l).text;
+    if (!/^\s*>\s?/.test(lineText) && lineText.trim().length > 0) {
+      allQuotes = false;
+      break;
+    }
+  }
 
   const changes: ChangeSpec[] = [];
 
@@ -351,13 +383,14 @@ export function setBlockquote(view: EditorView) {
     if (!line.text.trim()) continue;
 
     const clean = cleanLinePrefix(line.text);
-    const newLine = `> ${clean}`;
+    const newLine = allQuotes ? clean : `> ${clean}`;
     changes.push({ from: line.from, to: line.to, insert: newLine });
   }
 
   view.dispatch({ changes });
   view.focus();
 }
+
 
 /**
  * Inserts a Notion-style table template
@@ -610,15 +643,113 @@ export function insertLinkTemplate(view: EditorView, replaceRange?: { from: numb
 }
 
 /**
+ * Inserts an inline or block LaTeX math equation template
+ */
+export function insertMathTemplate(
+  view: EditorView,
+  isBlock: boolean = false,
+  replaceRange?: { from: number; to: number }
+) {
+  const target = replaceRange || {
+    from: view.state.selection.main.from,
+    to: view.state.selection.main.to,
+  };
+
+  if (isBlock) {
+    const template = `$$\n\\sum_{i=1}^n x_i\n$$\n`;
+    view.dispatch({
+      changes: { from: target.from, to: target.to, insert: template },
+      selection: EditorSelection.single(target.from + 3, target.from + 3 + 14),
+    });
+  } else {
+    const template = `$E = mc^2$`;
+    view.dispatch({
+      changes: { from: target.from, to: target.to, insert: template },
+      selection: EditorSelection.single(target.from + 1, target.from + 9),
+    });
+  }
+  view.focus();
+}
+
+/**
+ * Toggles text highlight (==text==)
+ */
+export function toggleHighlight(view: EditorView) {
+  toggleInlineFormat(view, '==');
+}
+
+/**
+ * Indents a list item by 2 spaces when pressing Tab
+ */
+export function indentListItem(view: EditorView): boolean {
+  const { state } = view;
+  const sel = state.selection.main;
+  const line = state.doc.lineAt(sel.from);
+
+  // Check if current line is a bullet, numbered, or task list item
+  const match = line.text.match(/^(\s*)([-*]|\d+\.|-\s*\[[ xX]\])\s/);
+  if (!match) return false;
+
+  // Prepend 2 spaces of indentation to the line
+  view.dispatch({
+    changes: { from: line.from, insert: '  ' },
+    selection: { anchor: sel.anchor + 2, head: sel.head + 2 },
+  });
+  return true;
+}
+
+/**
+ * Outdents a list item by 2 spaces when pressing Shift-Tab
+ */
+export function outdentListItem(view: EditorView): boolean {
+  const { state } = view;
+  const sel = state.selection.main;
+  const line = state.doc.lineAt(sel.from);
+
+  // 1. If line has leading indentation, remove up to 2 spaces
+  const indentMatch = line.text.match(/^(\s{1,2})/);
+  if (indentMatch) {
+    const removeCount = indentMatch[1].length;
+    view.dispatch({
+      changes: { from: line.from, to: line.from + removeCount, insert: '' },
+      selection: {
+        anchor: Math.max(line.from, sel.anchor - removeCount),
+        head: Math.max(line.from, sel.head - removeCount),
+      },
+    });
+    return true;
+  }
+
+  // 2. If already at zero indent and is a list item, remove list marker
+  const listMatch = line.text.match(/^(([-*]|\d+\.|-\s*\[[ xX]\])\s*)/);
+  if (listMatch) {
+    const removeCount = listMatch[1].length;
+    view.dispatch({
+      changes: { from: line.from, to: line.from + removeCount, insert: '' },
+      selection: {
+        anchor: Math.max(line.from, sel.anchor - removeCount),
+        head: Math.max(line.from, sel.head - removeCount),
+      },
+    });
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Standard Markdown Keyboard Shortcuts:
  * ⌘B / Ctrl+B -> Bold
  * ⌘I / Ctrl+I -> Italic
  * ⌘E / Ctrl+E -> Inline Code
  * ⌘⇧X / ⌘⇧S -> Strikethrough
+ * ⌘⇧H -> Highlight (==text==)
+ * ⌘⇧. -> Quote / Blockquote
  * ⌘⌥1 / ⌘⌥2 / ⌘⌥3 -> Headings
  * ⌘⇧8 -> Bulleted list
  * ⌘⇧7 -> Numbered list
  * ⌘⇧9 -> To-do checklist
+ * Tab / Shift-Tab -> Indent / Outdent list items
  */
 export const markdownFormattingKeymap: KeyBinding[] = [
   {
@@ -639,6 +770,20 @@ export const markdownFormattingKeymap: KeyBinding[] = [
     key: 'Mod-e',
     run: (view) => {
       toggleInlineFormat(view, '`');
+      return true;
+    },
+  },
+  {
+    key: 'Mod-Shift-h',
+    run: (view) => {
+      toggleInlineFormat(view, '==');
+      return true;
+    },
+  },
+  {
+    key: 'Mod-Shift-.',
+    run: (view) => {
+      setBlockquote(view);
       return true;
     },
   },
@@ -708,6 +853,14 @@ export const markdownFormattingKeymap: KeyBinding[] = [
   {
     key: 'Mod-Enter',
     run: (view) => toggleTaskCompletion(view),
+  },
+  {
+    key: 'Tab',
+    run: (view) => indentListItem(view),
+  },
+  {
+    key: 'Shift-Tab',
+    run: (view) => outdentListItem(view),
   },
   {
     key: 'Enter',
@@ -819,3 +972,4 @@ export const markdownFormattingKeymap: KeyBinding[] = [
     },
   },
 ];
+

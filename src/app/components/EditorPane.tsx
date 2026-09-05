@@ -7,6 +7,7 @@ import { useWorkspaceStore } from '../stores/workspace';
 import { useSettingsStore } from '../stores/settings';
 import { FloatingToolbar } from './FloatingToolbar';
 import { SlashCommandMenu } from './SlashCommandMenu';
+import { ImageModal } from './ImageModal';
 import { toggleInlineFormat, setHeadingLevel } from '../../editor/commands/formatting';
 import { Folder, FileText, Plus } from 'lucide-react';
 import { formatDisplayName } from '../../core/document/file-meta';
@@ -27,6 +28,8 @@ export const EditorPane: React.FC<EditorPaneProps> = ({ modeOverride }) => {
   const updateCursorStats = useWorkspaceStore((s) => s.updateCursorStats);
 
   const globalMode = useSettingsStore((s) => s.mode);
+  const typewriterMode = useSettingsStore((s) => s.typewriterMode);
+  const focusMode = useSettingsStore((s) => s.focusMode);
   const effectiveMode = modeOverride || globalMode;
 
   // Floating toolbar state (on text selection)
@@ -38,6 +41,11 @@ export const EditorPane: React.FC<EditorPaneProps> = ({ modeOverride }) => {
   const [slashQuery, setSlashQuery] = useState('');
   const [slashPos, setSlashPos] = useState<{ top: number; left: number } | null>(null);
   const [slashRange, setSlashRange] = useState<{ from: number; to: number } | null>(null);
+
+  // Image Modal state (for inserting and editing images)
+  const [imageModalOpen, setImageModalOpen] = useState(false);
+  const [imageTargetRange, setImageTargetRange] = useState<{ from: number; to: number } | null>(null);
+  const [editingImageData, setEditingImageData] = useState<{ alt: string; url: string; title?: string } | null>(null);
 
   // Notion-style Empty Line '+' button state
   const [emptyLinePlus, setEmptyLinePlus] = useState<{
@@ -116,6 +124,8 @@ export const EditorPane: React.FC<EditorPaneProps> = ({ modeOverride }) => {
     const extensions = createEditorExtensions({
       initialDoc: initialText,
       mode: effectiveMode,
+      typewriterMode,
+      focusMode,
       onDocChange: (newDoc) => {
         if (activeDocId) {
           updateContent(activeDocId, newDoc);
@@ -142,20 +152,41 @@ export const EditorPane: React.FC<EditorPaneProps> = ({ modeOverride }) => {
           setFloatingPos(null);
         }
 
-        // Handle Notion-style '+' button on empty line
-        if (sel.empty) {
+        // 2. Handle Live Slash Command (/) & Notion-style '+' button on empty line
+        if (sel.empty && effectiveMode !== 'source') {
           const pos = sel.from;
           const lineObj = view.state.doc.lineAt(pos);
+          const textBefore = lineObj.text.slice(0, pos - lineObj.from);
 
-          if (effectiveMode !== 'source' && lineObj.text.trim() === '') {
-            requestAnimationFrame(() => updateEmptyPlusState());
+          // Trigger slash menu if cursor is preceded by / (start of line or after whitespace)
+          const slashMatch = textBefore.match(/(?:^|\s)\/([a-zA-Z0-9_-]*)$/);
+          if (slashMatch) {
+            const slashIndexInLine = textBefore.lastIndexOf('/');
+            const slashFrom = lineObj.from + slashIndexInLine;
+            const query = slashMatch[1];
+            const coords = view.coordsAtPos(pos);
+            if (coords) {
+              setSlashPos({
+                top: coords.bottom,
+                left: Math.max(10, coords.left),
+              });
+              setSlashQuery(query);
+              setSlashRange({ from: slashFrom, to: pos });
+              setSlashOpen(true);
+              setEmptyLinePlus(null);
+            }
           } else {
-            setEmptyLinePlus(null);
+            setSlashOpen(false);
+            if (lineObj.text.trim() === '') {
+              requestAnimationFrame(() => updateEmptyPlusState());
+            } else {
+              setEmptyLinePlus(null);
+            }
           }
         } else {
           setEmptyLinePlus(null);
+          setSlashOpen(false);
         }
-        setSlashOpen(false);
       },
     });
 
@@ -241,7 +272,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({ modeOverride }) => {
       view.destroy();
       viewRef.current = null;
     };
-  }, [activeDocId, effectiveMode]);
+  }, [activeDocId, effectiveMode, typewriterMode, focusMode]);
 
   // Compute Notion-style breadcrumb hierarchy
   const currentDoc = documents.find((d) => d.id === activeDocId);
@@ -286,6 +317,48 @@ export const EditorPane: React.FC<EditorPaneProps> = ({ modeOverride }) => {
     window.addEventListener('as:scroll-to-line', handleScrollToHeading);
     return () => window.removeEventListener('as:scroll-to-line', handleScrollToHeading);
   }, []);
+
+  // Handle edit image event from ImageWidget
+  useEffect(() => {
+    const handleEditImage = (e: Event) => {
+      const customEvent = e as CustomEvent<{
+        from: number;
+        to: number;
+        alt: string;
+        url: string;
+        title?: string;
+      }>;
+      if (!customEvent.detail) return;
+      setImageTargetRange({ from: customEvent.detail.from, to: customEvent.detail.to });
+      setEditingImageData({
+        alt: customEvent.detail.alt,
+        url: customEvent.detail.url,
+        title: customEvent.detail.title,
+      });
+      setImageModalOpen(true);
+    };
+
+    window.addEventListener('as:edit-image', handleEditImage);
+    return () => window.removeEventListener('as:edit-image', handleEditImage);
+  }, []);
+
+  const handleImageConfirm = (alt: string, url: string, title?: string) => {
+    const view = viewRef.current;
+    if (!view) return;
+    const target = imageTargetRange || {
+      from: view.state.selection.main.from,
+      to: view.state.selection.main.to,
+    };
+    const imageMd = title ? `![${alt}](${url} "${title}")\n` : `![${alt}](${url})\n`;
+    view.dispatch({
+      changes: { from: target.from, to: target.to, insert: imageMd },
+      selection: { anchor: target.from + imageMd.length },
+    });
+    view.focus();
+    setImageModalOpen(false);
+    setImageTargetRange(null);
+    setEditingImageData(null);
+  };
 
   interface BreadcrumbItem {
     id: string;
@@ -451,6 +524,26 @@ export const EditorPane: React.FC<EditorPaneProps> = ({ modeOverride }) => {
           position={slashPos}
           slashRange={slashRange}
           onClose={() => setSlashOpen(false)}
+          onOpenImageModal={(range) => {
+            setSlashOpen(false);
+            setImageTargetRange(range);
+            setEditingImageData(null);
+            setImageModalOpen(true);
+          }}
+        />
+
+        {/* Image Insert & Edit Modal */}
+        <ImageModal
+          isOpen={imageModalOpen}
+          initialAlt={editingImageData?.alt || ''}
+          initialUrl={editingImageData?.url || ''}
+          initialTitle={editingImageData?.title || ''}
+          onClose={() => {
+            setImageModalOpen(false);
+            setImageTargetRange(null);
+            setEditingImageData(null);
+          }}
+          onConfirm={handleImageConfirm}
         />
       </div>
     </div>

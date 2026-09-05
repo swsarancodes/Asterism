@@ -5,6 +5,7 @@ import { syntaxTree } from '@codemirror/language';
 const strongDeco = Decoration.mark({ class: 'as-strong' });
 const emDeco = Decoration.mark({ class: 'as-em' });
 const strikeDeco = Decoration.mark({ class: 'as-strike' });
+const highlightDeco = Decoration.mark({ class: 'as-highlight' });
 const codeInlineDeco = Decoration.mark({ class: 'as-code-inline' });
 const linkDeco = Decoration.mark({ class: 'as-link', attributes: { title: 'Click to open link' } });
 
@@ -69,6 +70,13 @@ export function buildInlineStyleDecorations(view: EditorView): DecorationSet {
     let sm;
     while ((sm = strikeRegex.exec(text)) !== null) {
       marks.push({ from: from + sm.index, to: from + sm.index + sm[0].length, deco: strikeDeco });
+    }
+
+    // Highlight pattern: ==text==
+    const highlightRegex = /==([^=\n]+?)==/g;
+    let hm;
+    while ((hm = highlightRegex.exec(text)) !== null) {
+      marks.push({ from: from + hm.index, to: from + hm.index + hm[0].length, deco: highlightDeco });
     }
 
     // Inline code pattern: `code`

@@ -111,6 +111,16 @@ export function buildConcealDecorations(view: EditorView): DecorationSet {
       rawRanges.push({ from: end - 2, to: end });
     }
 
+    // Highlight pattern: ==text==
+    const highlightRegex = /==([^=\n]+?)==/g;
+    let hm: RegExpExecArray | null;
+    while ((hm = highlightRegex.exec(text)) !== null) {
+      const start = from + hm.index;
+      const end = start + hm[0].length;
+      rawRanges.push({ from: start, to: start + 2 });
+      rawRanges.push({ from: end - 2, to: end });
+    }
+
     // Inline code pattern: `code`
     const codeRegex = /`([^`\n]+?)`/g;
     let cm: RegExpExecArray | null;

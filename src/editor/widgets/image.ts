@@ -167,9 +167,20 @@ export class ImageWidget extends MarkdownWidget {
     });
 
     // Edit Markdown / Alt Action
-    const editBtn = makeBtn('Edit', 'Edit raw markdown', (e) => {
+    const editBtn = makeBtn('Edit', 'Edit image details', (e) => {
       e.stopPropagation();
       const range = this.resolveRange(view, container);
+      window.dispatchEvent(
+        new CustomEvent('as:edit-image', {
+          detail: {
+            from: range.from,
+            to: range.to,
+            alt: this.parsed.alt,
+            url: this.parsed.url,
+            title: this.parsed.title,
+          },
+        })
+      );
       view.dispatch({
         selection: { anchor: range.from, head: range.to },
       });
