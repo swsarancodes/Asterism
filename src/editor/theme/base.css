@@ -875,6 +875,115 @@
   font-size: 14px;
   line-height: 1.6;
   color: var(--as-text);
+  outline: none;
+  min-height: 22px;
+}
+
+/* Callout Actions Toolbar */
+.as-callout-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  background: var(--as-bg-surface, rgba(30, 30, 30, 0.75));
+  border: 1px solid var(--as-border, rgba(128, 128, 128, 0.2));
+  backdrop-filter: blur(8px);
+  border-radius: var(--as-radius-sm, 4px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--as-transition-fast, 0.15s ease);
+  z-index: 10;
+  box-shadow: var(--as-shadow-sm, 0 2px 6px rgba(0, 0, 0, 0.08));
+}
+
+.as-callout:hover .as-callout-actions,
+.as-callout:focus-within .as-callout-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.as-callout-btn {
+  background: transparent;
+  border: none;
+  color: var(--as-text-muted, #777);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: var(--as-radius-sm, 3px);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all var(--as-transition-fast, 0.12s ease);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.as-callout-btn:hover {
+  background: var(--as-bg-hover, rgba(128, 128, 128, 0.12));
+  color: var(--as-text, #333);
+}
+
+.as-callout-delete-btn:hover {
+  background: rgba(239, 68, 68, 0.15) !important;
+  color: #ef4444 !important;
+}
+
+/* Callout Type Menu Dropdown */
+.as-callout-type-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background: var(--as-bg-surface, #fff);
+  border: 1px solid var(--as-border, rgba(128, 128, 128, 0.2));
+  border-radius: var(--as-radius-md, 6px);
+  box-shadow: var(--as-shadow-md, 0 4px 14px rgba(0, 0, 0, 0.12));
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 25;
+  min-width: 120px;
+}
+
+.as-callout-menu-item {
+  background: transparent;
+  border: none;
+  color: var(--as-text, #333);
+  font-size: 12px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: inherit;
+  transition: background var(--as-transition-fast, 0.12s ease);
+}
+
+.as-callout-menu-item:hover {
+  background: var(--as-bg-hover, rgba(128, 128, 128, 0.1));
+}
+
+/* Placeholders for empty callout elements */
+.as-callout-body:empty:before {
+  content: attr(data-placeholder);
+  color: var(--as-text-muted, #999);
+  pointer-events: none;
+  font-style: normal;
+  opacity: 0.7;
+}
+
+.as-callout-title:empty:before {
+  content: attr(data-placeholder);
+  color: var(--as-text-muted, #999);
+  pointer-events: none;
+  font-weight: normal;
+  opacity: 0.7;
 }
 
 /* Interactive Checkboxes */

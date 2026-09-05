@@ -412,6 +412,73 @@ describe('CodeBlockWidget and CalloutWidget In-Place Editing', () => {
     const nextWidget = new CalloutWidget(source, 0, source.length);
     expect(nextWidget.updateDOM(dom, view)).toBe(true);
   });
+
+  test('CalloutWidget has action bar with Delete, Turn to Text, and Type Switcher', () => {
+    const source = '> This is an inspiring quote';
+    const widget = new CalloutWidget(source, 0, source.length);
+
+    const state = EditorState.create({ doc: source });
+    const view = new EditorView({ state });
+
+    const dom = widget.toDOM(view);
+    const actionBar = dom.querySelector('.as-callout-actions');
+    expect(actionBar).not.toBeNull();
+
+    const deleteBtn = dom.querySelector('.as-callout-delete-btn') as HTMLButtonElement;
+    expect(deleteBtn).not.toBeNull();
+    expect(deleteBtn.textContent).toBe('Delete');
+
+    const unquoteBtn = Array.from(dom.querySelectorAll('.as-callout-btn')).find(
+      (b) => b.textContent?.includes('Turn to Text')
+    ) as HTMLButtonElement;
+    expect(unquoteBtn).not.toBeNull();
+
+    const typeBtn = dom.querySelector('.as-callout-type-btn') as HTMLButtonElement;
+    expect(typeBtn).not.toBeNull();
+
+    // 1. Test Delete action
+    deleteBtn.click();
+    expect(view.state.doc.toString()).toBe('');
+
+    view.destroy();
+  });
+
+  test('CalloutWidget Turn to Text converts blockquote back into plain text', () => {
+    const source = '> First line of quote\n> Second line';
+    const widget = new CalloutWidget(source, 0, source.length);
+
+    const state = EditorState.create({ doc: source });
+    const view = new EditorView({ state });
+
+    const dom = widget.toDOM(view);
+    const unquoteBtn = Array.from(dom.querySelectorAll('.as-callout-btn')).find(
+      (b) => b.textContent?.includes('Turn to Text')
+    ) as HTMLButtonElement;
+    expect(unquoteBtn).not.toBeNull();
+
+    unquoteBtn.click();
+    expect(view.state.doc.toString()).toBe('First line of quote\nSecond line');
+
+    view.destroy();
+  });
+
+  test('CalloutWidget Backspace on empty body deletes quote completely', () => {
+    const source = '> ';
+    const widget = new CalloutWidget(source, 0, source.length);
+
+    const state = EditorState.create({ doc: source });
+    const view = new EditorView({ state });
+
+    const dom = widget.toDOM(view);
+    const bodyEl = dom.querySelector('.as-callout-body') as HTMLElement;
+    expect(bodyEl).not.toBeNull();
+
+    // Body is empty -> press Backspace
+    bodyEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true }));
+    expect(view.state.doc.toString()).toBe('');
+
+    view.destroy();
+  });
 });
 
 describe('Link Attachment Commands & Normalization', () => {
